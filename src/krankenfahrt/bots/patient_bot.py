@@ -990,8 +990,8 @@ async def handle_booking_message(
 
 
 async def _ask_to_rephrase(update: Update) -> None:
-"""Ask the patient to rephrase — NLU couldn't understand."""
-await update.message.reply_text(  # type: ignore[union-attr]
+    """Ask the patient to rephrase — NLU couldn't understand."""
+    await update.message.reply_text(  # type: ignore[union-attr]
         "🤔 Das habe ich nicht richtig verstanden. "
         "Kannst du es anders formulieren?\n\n"
         "💡 *Beispiele:*\n"
@@ -1110,7 +1110,7 @@ async def _handle_book_intent(
         f"Du bekommst dann Name und Kennzeichen des Fahrers."
     )
 
-    awaiting update.message.reply_text(  # type: ignore[union-attr]
+    await update.message.reply_text(  # type: ignore[union-attr]
         confirm_msg,
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -1147,7 +1147,7 @@ async def _handle_info_intent(update: Update, patient: Patient) -> None:
             f"{t.dest_addr} ({t.status})"
         )
 
-    awaiting update.message.reply_text(  # type: ignore[union-attr]
+    await update.message.reply_text(  # type: ignore[union-attr]
         "\n".join(lines),
         parse_mode=ParseMode.MARKDOWN,
     )
@@ -1155,7 +1155,7 @@ async def _handle_info_intent(update: Update, patient: Patient) -> None:
 
 async def _handle_other_intent(update: Update, patient: Patient) -> None:
     """Redirect non-booking messages to helpful commands."""
-    awaiting update.message.reply_text(  # type: ignore[union-attr]
+    await update.message.reply_text(  # type: ignore[union-attr]
         "ℹ️ Ich bin dein Buchungsassistent für Krankentransporte.\n\n"
         "📋 *Das kannst du tun:*\n"
         "• Fahrten buchen: Einfach Nachricht schreiben!\n"
@@ -1286,7 +1286,16 @@ def register_handlers(app: Application) -> None:
 
     logger.info(
         "Patient-Bot handlers registered: start, profil, profil_edit, "
-        "vorlagen, vorlage_neu, vorlage_show, vorlage_edit, vorlage_del"
+        "vorlagen, vorlage_neu, vorlage_show, vorlage_edit, vorlage_del, "
+        "booking_nlu"
+    )
+
+    # ── Free-text booking handler (NLU) ──────────────────────────────────
+    # Processes ALL non-command text messages through DeepSeek NLU for
+    # booking intent extraction. Placed LAST so conversation handlers
+    # (profile_edit, vorlage_neu, vorlage_edit) take priority.
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_booking_message)
     )
 
 
