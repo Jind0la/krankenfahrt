@@ -914,6 +914,270 @@ async def vorlage_edit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 
+# ── NLU Booking Handler ──────────────────────────────────────────────────
+
+# Minimum confidence threshold for accepting an NLU intent as valid
+_MIN_CONFIDENCE = 0.40
+
+
+async def handle_booking_message(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Process a free-text message as a potential booking request.
+
+    Routes the message through DeepSeek NLU to extract booking intent and
+    entities. Handles the complete booking flow:
+
+    - ``book``: Create one-way or round-trip (with return) in the DB.
+    - ``info``: Show upcoming trips / answer questions.
+    - ``other``: Redirect to helpful commands.
+    - Low confidence / unparseable: Ask patient to rephrase.
+    - Unregistered patient: Guide to /start.
+    - API failure: Graceful error message.
+
+    This handler processes ALL non-command text messages from patients.
+    """
+    if update.effective_user is None or update.message is None:
+        return
+
+    telegram_id = update.effective_user.id
+    text = update.message.text or ""
+
+    if not text.strip():
+        return
+
+    # 1. Check patient is registered
+    patient = await Patient.filter(telegram_id=telegram_id).first()
+    if patient is None:
+        await update.message.reply_text(
+            "👋 Du bist noch nicht registriert! Bitte nutze /start, "
+            "um dein Profil anzulegen. Danach kannst du Fahrten buchen."
+        )
+        return
+
+    # 2. Run NLU extraction
+    try:
+        intent = await extract_booking_intent(text)
+    except Exception as e:
+        logger.exception("NLU extraction failed for patient %d: %s", telegram_id, e)
+        await update.message.reply_text(
+            "❌ Entschuldigung, ich kann deine Nachricht gerade nicht "
+            "verarbeiten. Bitte versuche es später noch einmal oder "
+            "rufe uns an."
+        )
+        return
+
+    action = intent.action
+    confidence = intent.confidence
+
+    # 3. Route based on intent action
+    if confidence < _MIN_CONFIDENCE:
+        await _ask_to_rephrase(update)
+        return
+
+    if action == "book":
+        await _handle_book_intent(update, patient, intent)
+    elif action == "info":
+        await _handle_info_intent(update, patient)
+    elif action in ("recurring", "cancel", "change"):
+        await update.message.reply_text(
+            "ℹ️ Diese Funktion ist noch nicht verfügbar. "
+            "Bitte kontaktiere unseren Support für "
+            f"{_action_label(action)}."
+        )
+    else:  # other / anything else
+        await _handle_other_intent(update, patient)
+
+
+async def _ask_to_rephrase(update: Update) -> None:
+"""Ask the patient to rephrase — NLU couldn't understand."""
+await update.message.reply_text(  # type: ignore[union-attr]
+        "🤔 Das habe ich nicht richtig verstanden. "
+        "Kannst du es anders formulieren?\n\n"
+        "💡 *Beispiele:*\n"
+        "• \"Morgen 8 Uhr zur Dialyse Klinikum Nord\"\n"
+        "• \"Nächsten Dienstag 14:00 Physio Zentrum\"\n"
+        "• \"Jeden Mo/Mi/Fr 9:00 Arztpraxis Dr. Müller\"\n\n"
+        "Wichtig: Nenne Datum/Zeit, Ziel und ggf. Rückfahrtzeit.",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def _handle_book_intent(
+    update: Update, patient: Patient, intent
+) -> None:
+    """Create a trip (or trips) from a booking intent.
+
+    Validates required fields, creates Trip records, and sends confirmation.
+    """
+    # Validate required fields
+    if not intent.pickup_date or not intent.pickup_time:
+        await update.message.reply_text(  # type: ignore[union-attr]
+            "📅 *Wann soll die Fahrt stattfinden?*\n\n"
+            "Bitte nenne Datum und Uhrzeit, z.B.:\n"
+            "\"Morgen 8 Uhr\" oder \"Freitag 14:30\"",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    if not intent.dest:
+        await update.message.reply_text(  # type: ignore[union-attr]
+            "📍 *Wohin soll die Fahrt gehen?*\n\n"
+            "Bitte nenne das Ziel, z.B.:\n"
+            "\"Klinikum Nord\", \"Physio Zentrum\", \"Arztpraxis Dr. Müller\"",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    # Parse date and time
+    try:
+        from datetime import datetime as dt
+        pickup_dt = dt.fromisoformat(
+            f"{intent.pickup_date}T{intent.pickup_time}:00"
+        )
+    except (ValueError, TypeError):
+        await update.message.reply_text(  # type: ignore[union-attr]
+            "❌ Datum oder Uhrzeit konnte nicht verstanden werden. "
+            "Bitte formatiere so: \"Morgen 8 Uhr\" oder \"10.06.2026 14:30\"."
+        )
+        return
+
+    pickup_addr = patient.default_pickup_addr
+
+    # Create outbound trip
+    trip = await Trip.create(
+        patient=patient,
+        pickup_addr=pickup_addr,
+        dest_addr=intent.dest,
+        scheduled_pickup=pickup_dt,
+        status="geplant",
+    )
+    logger.info(
+        "Trip booked: id=%d patient=%d dest=%s pickup=%s",
+        trip.id, patient.id, intent.dest, pickup_dt.isoformat(),
+    )
+
+    # Create return trip if requested
+    return_trip = None
+    if intent.return_time:
+        try:
+            return_dt = dt.fromisoformat(
+                f"{intent.pickup_date}T{intent.return_time}:00"
+            )
+            return_trip = await Trip.create(
+                patient=patient,
+                pickup_addr=intent.dest,
+                dest_addr=pickup_addr,
+                scheduled_pickup=return_dt,
+                status="geplant",
+            )
+            logger.info(
+                "Return trip booked: id=%d outbound=%d",
+                return_trip.id, trip.id,
+            )
+        except (ValueError, TypeError):
+            logger.warning("Could not parse return time: %s", intent.return_time)
+
+    # Build and send confirmation
+    from krankenfahrt.core.notification import Messages
+
+    # Format pickup date+time nicely
+    days_de = {
+        "Mon": "Mo", "Tue": "Di", "Wed": "Mi",
+        "Thu": "Do", "Fri": "Fr", "Sat": "Sa", "Sun": "So",
+    }
+    dow_en = pickup_dt.strftime("%a")
+    dow_de = days_de.get(dow_en, dow_en)
+
+    date_str = f"{dow_de} {pickup_dt.strftime('%d.%m.%Y')}"
+
+    confirm_msg = (
+        f"✅ *Fahrt gebucht!*\n\n"
+        f"📅 {date_str} um {intent.pickup_time} Uhr\n"
+        f"📍 Von: {pickup_addr}\n"
+        f"🏥 Nach: {intent.dest}\n"
+        f"🚗 Fahrzeugtyp: {patient.vehicle_type}\n"
+    )
+
+    if intent.return_time:
+        confirm_msg += f"🔄 Rückfahrt: {intent.return_time} Uhr\n"
+    if intent.reason:
+        confirm_msg += f"📋 Grund: {intent.reason}\n"
+
+    confirm_msg += (
+        f"\n📞 Bei Fragen: {config.COMPANY_PHONE}\n\n"
+        f"Wir melden uns, sobald ein Fahrer zugeteilt ist. "
+        f"Du bekommst dann Name und Kennzeichen des Fahrers."
+    )
+
+    awaiting update.message.reply_text(  # type: ignore[union-attr]
+        confirm_msg,
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def _handle_info_intent(update: Update, patient: Patient) -> None:
+    """Show upcoming trips for the patient."""
+    from datetime import datetime as dt
+
+    now = dt.now()
+    trips = await Trip.filter(
+        patient=patient,
+        scheduled_pickup__gte=now,
+    ).order_by("scheduled_pickup").limit(5)
+
+    if not trips:
+        await update.message.reply_text(  # type: ignore[union-attr]
+            "📋 Du hast aktuell keine anstehenden Fahrten.\n\n"
+            "Schreib mir einfach wann und wohin du fahren möchtest, "
+            "z.B.: \"Morgen 8 Uhr zur Dialyse Klinikum Nord\""
+        )
+        return
+
+    lines = ["📋 *Deine nächsten Fahrten:*\n"]
+    for t in trips:
+        status_icon = {
+            "geplant": "📋", "zugewiesen": "✅", "anfahrt": "🚗",
+            "angekommen": "📍", "patient_an_bord": "👤",
+            "unterwegs": "🏥", "abgesetzt": "✅", "abgeschlossen": "🔒",
+        }.get(t.status, "❓")
+
+        lines.append(
+            f"{status_icon} {t.scheduled_pickup.strftime('%d.%m.%Y %H:%M')} → "
+            f"{t.dest_addr} ({t.status})"
+        )
+
+    awaiting update.message.reply_text(  # type: ignore[union-attr]
+        "\n".join(lines),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def _handle_other_intent(update: Update, patient: Patient) -> None:
+    """Redirect non-booking messages to helpful commands."""
+    awaiting update.message.reply_text(  # type: ignore[union-attr]
+        "ℹ️ Ich bin dein Buchungsassistent für Krankentransporte.\n\n"
+        "📋 *Das kannst du tun:*\n"
+        "• Fahrten buchen: Einfach Nachricht schreiben!\n"
+        "  z.B.: \"Morgen 8 Uhr zur Dialyse Klinikum Nord\"\n"
+        "• /profil — Deine Daten anzeigen\n"
+        "• /profil_edit — Profil bearbeiten\n"
+        "• /vorlagen — Wiederkehrende Fahrten\n"
+        "• Fahrten abfragen: \"Habe ich morgen eine Fahrt?\"\n\n"
+        f"📞 Bei dringenden Anliegen: {config.COMPANY_PHONE}",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+def _action_label(action: str) -> str:
+    """Human-readable German label for NLU actions."""
+    return {
+        "recurring": "wiederkehrende Fahrten",
+        "cancel": "Stornierungen",
+        "change": "Änderungen",
+    }.get(action, action)
+
+
 # ── Handler registration ───────────────────────────────────────────────────
 
 def register_handlers(app: Application) -> None:

@@ -167,20 +167,6 @@ class TestConfigIntegration:
         monkeypatch.setenv("RATE_LIMIT_TOKENS_PER_SEC", "10.0")
         monkeypatch.setenv("RATE_LIMIT_BURST", "20")
 
-        os.environ["PATIENT_BOT_TOKEN"] = "pbt"
-        os.environ["DRIVER_BOT_TOKEN"] = "dbt"
-        os.environ["CHEF_BOT_TOKEN"] = "cbt"
-        os.environ["DEEPSEEK_API_KEY"] = "dsk"
-        os.environ["OPENAI_API_KEY"] = "oak"
-        os.environ["LLM_PRIMARY"] = "openai"
-        os.environ["LLM_FALLBACK"] = "deepseek"
-        os.environ["LLM_TIMEOUT"] = "15.0"
-        os.environ["LLM_MAX_RETRIES"] = "5"
-        os.environ["DB_RETRY_MAX_ATTEMPTS"] = "5"
-        os.environ["DB_RETRY_BACKOFF_BASE"] = "1.5"
-        os.environ["RATE_LIMIT_TOKENS_PER_SEC"] = "10.0"
-        os.environ["RATE_LIMIT_BURST"] = "20"
-
         from krankenfahrt.config import Config
 
         cfg = Config()
