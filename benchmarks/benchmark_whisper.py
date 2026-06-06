@@ -128,6 +128,10 @@ def analyze_bottlenecks(all_results: list[dict]) -> str:
     """Identify bottlenecks from results."""
     lines = ["\n## Bottleneck Analysis\n"]
 
+    if not all_results:
+        lines.append("  (no results to analyze)")
+        return "\n".join(lines)
+
     # Group by model
     by_model = {}
     for r in all_results:

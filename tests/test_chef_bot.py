@@ -586,15 +586,15 @@ async def test_export_pdf_with_trips(db, tmp_path):
     update = make_update(user_id=111111)
     ctx = make_context(args=["pdf", str(patient.id)])
 
-    # Patch PROJECT_ROOT to use tmp_path for output
-    import krankenfahrt.config as cfg
+    # Patch PROJECT_ROOT in chef_bot module to use tmp_path for output
+    import krankenfahrt.bots.chef_bot as chef_bot_module
 
-    orig_root = cfg.PROJECT_ROOT
+    orig_root = chef_bot_module.PROJECT_ROOT
     try:
-        cfg.PROJECT_ROOT = tmp_path
+        chef_bot_module.PROJECT_ROOT = tmp_path
         await _handle_export_pdf(update, ctx)
     finally:
-        cfg.PROJECT_ROOT = orig_root
+        chef_bot_module.PROJECT_ROOT = orig_root
 
     # First call: progress
     progress = update.message.reply_text.call_args_list[0][0][0]

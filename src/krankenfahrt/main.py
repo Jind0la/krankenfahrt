@@ -6,16 +6,141 @@ import structlog
 from telegram.ext import Application, ApplicationBuilder
 from tortoise import Tortoise
 
+from krankenfahrt.alerting import AlertManager, DeadmanSwitch, RateRule
 from krankenfahrt.config import config
 from krankenfahrt.health import HealthServer, make_db_health_check
 from krankenfahrt.logging_setup import setup_logging
-from krankenfahrt.metrics_server import MetricsServer
+from krankenfahrt.metrics_server import MetricsServer, bump_heartbeat
 from krankenfahrt.models.schema import (
     Driver, DriverBreak, Escalation, Patient, RecurringTrip, Trip, TripEvent, Vehicle,
 )
 from krankenfahrt.services.morning_push import run_morning_push_loop
 
 logger = structlog.get_logger(__name__)
+
+
+# ── Alerting ──────────────────────────────────────────────────
+
+
+def _make_telegram_notifier(chef_bot: Application):
+    """Create a Telegram notifier for the alert manager.
+
+    Sends alerts via the Chef bot to configured admin chat IDs.
+    """
+    async def send_alert(alert_name: str, message: str) -> None:
+        # Determine target chat IDs
+        if config.ALERTING_CHEF_CHAT_ID != 0:
+            chat_ids = [config.ALERTING_CHEF_CHAT_ID]
+        else:
+            chat_ids = config.ADMIN_TELEGRAM_IDS
+
+        if not chat_ids:
+            logger.warning(
+                "Alert %s has no target chat IDs — ADMIN_TELEGRAM_IDS is empty",
+                alert_name,
+            )
+            return
+
+        for chat_id in chat_ids:
+            try:
+                await chef_bot.bot.send_message(
+                    chat_id=chat_id,
+                    text=message,
+                    parse_mode="Markdown",
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to send alert %s to chat %s",
+                    alert_name,
+                    chat_id,
+                )
+
+    return send_alert
+
+
+def _build_alert_rules() -> list:
+    """Build the default alerting rule set from config."""
+    from krankenfahrt.alerting import Severity
+
+    return [
+        # ── High error rate (5xx) ──────────────────────────
+        RateRule(
+            name="High HTTP Error Rate",
+            description=(
+                "http_errors_total is rising faster than "
+                f"{config.ALERTING_ERROR_RATE_THRESHOLD}/s"
+            ),
+            metric_name="http_errors_total",
+            threshold_per_second=config.ALERTING_ERROR_RATE_THRESHOLD,
+            operator="gt",
+            duration_seconds=config.ALERTING_ERROR_RATE_DURATION,
+            severity=Severity.CRITICAL,
+            cooldown_seconds=config.ALERTING_COOLDOWN,
+        ),
+
+        # ── Deadman switch ─────────────────────────────────
+        DeadmanSwitch(
+            name="Application Heartbeat Missing",
+            description=(
+                "The application heartbeat has not been updated. "
+                "The service may be down or frozen."
+            ),
+            metric_name="krankenfahrt_heartbeat_timestamp_seconds",
+            max_age_seconds=config.ALERTING_DEADMAN_MAX_AGE,
+            severity=Severity.CRITICAL,
+            cooldown_seconds=config.ALERTING_COOLDOWN,
+        ),
+
+        # ── LLM fallback rate ──────────────────────────────
+        RateRule(
+            name="High LLM Fallback Rate",
+            description=(
+                "LLM requests are failing over to the fallback "
+                "provider frequently"
+            ),
+            metric_name="krankenfahrt_llm_fallback_total",
+            threshold_per_second=0.1,
+            operator="gt",
+            duration_seconds=120,
+            severity=Severity.WARNING,
+            cooldown_seconds=config.ALERTING_COOLDOWN,
+        ),
+
+        # ── LLM retry storms ───────────────────────────────
+        RateRule(
+            name="LLM Retry Storm",
+            description=(
+                "LLM calls are being retried at an unusually high rate"
+            ),
+            metric_name="krankenfahrt_llm_retry_total",
+            threshold_per_second=0.5,
+            operator="gt",
+            duration_seconds=60,
+            severity=Severity.WARNING,
+            cooldown_seconds=config.ALERTING_COOLDOWN,
+        ),
+
+        # ── DB retry pressure ──────────────────────────────
+        RateRule(
+            name="Database Retry Pressure",
+            description=(
+                "Database write operations are being retried at a high rate"
+            ),
+            metric_name="krankenfahrt_db_retry_total",
+            threshold_per_second=0.2,
+            operator="gt",
+            duration_seconds=120,
+            severity=Severity.WARNING,
+            cooldown_seconds=config.ALERTING_COOLDOWN,
+        ),
+    ]
+
+
+async def _heartbeat_loop() -> None:
+    """Bump the heartbeat metric every 15 seconds."""
+    while True:
+        bump_heartbeat()
+        await asyncio.sleep(15)
 
 
 async def init_database() -> None:
@@ -59,7 +184,7 @@ async def build_chef_bot() -> Application:
 
 
 async def main() -> None:
-    """Start all bots + health-check HTTP server."""
+    """Start all bots + health-check HTTP server + alerting."""
     setup_logging()
 
     logger.info("Krankenfahrt starting...")
@@ -100,9 +225,31 @@ async def main() -> None:
 
     logger.info("All three bots running")
 
-    # Start morning-push background loop (sends daily 06:00 overview to drivers)
+    # Start morning-push background loop
     morning_push_task = asyncio.create_task(run_morning_push_loop(driver_bot))
     logger.info("Morning-Push background task started")
+
+    # Start heartbeat loop (feeds deadman switch)
+    heartbeat_task = asyncio.create_task(_heartbeat_loop())
+    logger.info("Heartbeat loop started (15s interval)")
+
+    # Start alerting engine
+    alert_manager = None
+    alert_task = None
+    if config.ALERTING_ENABLED:
+        notifier = _make_telegram_notifier(chef_bot)
+        alert_rules = _build_alert_rules()
+        alert_manager = AlertManager(
+            rules=alert_rules,
+            notifier=notifier,
+            eval_interval=config.ALERTING_EVAL_INTERVAL,
+        )
+        alert_task = asyncio.create_task(alert_manager._eval_loop())
+        logger.info(
+            "Alerting started — %d rules, interval %ds",
+            len(alert_rules),
+            config.ALERTING_EVAL_INTERVAL,
+        )
 
     try:
         # Keep running until interrupted
@@ -111,6 +258,9 @@ async def main() -> None:
         logger.info("Shutting down...")
     finally:
         morning_push_task.cancel()
+        heartbeat_task.cancel()
+        if alert_task is not None:
+            alert_task.cancel()
         await patient_bot.stop()
         await driver_bot.stop()
         await chef_bot.stop()
