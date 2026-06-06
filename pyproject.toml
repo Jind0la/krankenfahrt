@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=75.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "krankenfahrt"
+version = "0.1.0"
+description = "AI-first medical transport dispatch system — three Telegram bots replacing the human dispatcher"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "Nimar Moradbakhti", email = "nimar@moradbakhti.com" }
+]
+keywords = ["medical-transport", "telegram-bot", "dispatch", "healthcare"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Healthcare Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Chat",
+]
+
+dependencies = [
+    "python-telegram-bot>=22.0",
+    "tortoise-orm[asyncpg]>=0.22",
+    "aiosqlite>=0.20",
+    "pydantic>=2.0",
+    "transitions>=0.9",
+    "httpx>=0.28",
+    "structlog>=24.0",
+    "python-dotenv>=1.0",
+    "prometheus-client>=0.21",
+    "aiohttp>=3.10",
+]
+
+[project.optional-dependencies]
+voice = ["faster-whisper>=1.0"]
+routing = ["ortools>=9.0"]
+billing = ["reportlab>=4.0"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "mypy>=1.0",
+]
+
+[project.scripts]
+krankenfahrt = "krankenfahrt.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,0 +1,20 @@
+# KTF — Always Apply
+Always apply this rule at the start of any coding session.
+
+## Non-Negotiable
+- Python 3.12+ only (no older syntax)
+- All async code must use `asyncio` (no sync where async is possible)
+- Never commit secrets or .env files
+- German language for all user-facing strings
+- Respect patient data: never log personal information at INFO level or above
+
+## This Project
+- Monorepo structure at ~/Dev/krankenfahrt/
+- Three Telegram bots: one asyncio process
+- SQLite via Tortoise ORM
+- DeepSeek for NLU, faster-whisper for voice
+
+## When In Doubt
+- Simpler is better. No over-engineering.
+- No new dependencies without explicit consideration.
+- Telegram handles offline — don't build custom offline logic.

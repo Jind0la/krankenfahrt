@@ -1,0 +1,23 @@
+# KTF — Project Principles
+
+## Architecture
+- Single asyncio event loop, one process
+- Shared Tortoise ORM across all bots
+- State machine (`transitions`) for trip lifecycle
+- Dispatch engine: Greedy (MVP) → OR-Tools (Phase 2)
+
+## Code Conventions
+- Type hints everywhere (Pydantic for data, regular types for logic)
+- `async def` for all database and network operations
+- `structlog` for structured logging
+- `ruff` for linting, `mypy` for type checking
+
+## Patterns
+- Bot handlers → lightweight, delegate to core services
+- Core logic → pure functions, testable without Telegram
+- Services → external integrations (LLM, Whisper, geo)
+
+## Testing
+- pytest + pytest-asyncio
+- Tests in `tests/` mirror `src/` structure
+- Mock Telegram API, test business logic directly
