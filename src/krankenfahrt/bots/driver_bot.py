@@ -15,24 +15,27 @@ Commands:
   /start  — Register driver or show status
 """
 
-from datetime import date, datetime, timezone
-
-
-def _now() -> datetime:
-    """Return current datetime with UTC timezone, matching Tortoise's aware storage."""
-    return datetime.now(timezone.utc)
+from datetime import UTC, date, datetime
 
 import structlog
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application, CallbackQueryHandler, CommandHandler, ContextTypes,
+    MessageHandler, filters,
+)
 from tortoise.exceptions import DoesNotExist
 
 from krankenfahrt.core.state_machine import TRIGGER_MAP, TripStateMachine
 from krankenfahrt.models.schema import Driver, DriverBreak, Trip, TripEvent
-from krankenfahrt.services.driver_intent import DriverIntent, extract_driver_intent
+from krankenfahrt.services.driver_intent import extract_driver_intent
 from krankenfahrt.services.voice import transcribe_voice
 
 logger = structlog.get_logger(__name__)
+
+
+def _now() -> datetime:
+    """Return current datetime with UTC timezone, matching Tortoise's aware storage."""
+    return datetime.now(UTC)
 
 # ── Callback data format ──────────────────────────────────────────────
 # "trip:{trip_id}:{trigger_name}"  e.g. "trip:42:losfahren"

@@ -10,7 +10,7 @@ overview via Telegram.
 
 import asyncio
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 from telegram.ext import Application
 
@@ -142,8 +142,13 @@ async def send_morning_push(app: Application) -> int:
 
 
 async def _seconds_until_next(hour: int, minute: int) -> float:
-    """Calculate seconds until the next occurrence of HH:MM local time."""
-    now = datetime.now(timezone.utc)
+    """Calculate seconds until the next occurrence of HH:MM local time.
+
+    Uses naive datetime (system-local timezone) — this is intentional
+    because the morning push is scheduled relative to the server's wall clock,
+    not UTC.
+    """
+    now = datetime.now()  # naive = local time, intentionally
     target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if target <= now:
         target += timedelta(days=1)
