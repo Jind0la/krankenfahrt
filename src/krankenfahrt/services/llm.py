@@ -1,12 +1,16 @@
-"""LLM service — DeepSeek NLP for patient booking extraction."""
+"""LLM service — NLU for patient booking extraction with fallback chain.
+
+Uses the resilience layer (call_with_fallback) which tries the primary
+LLM provider, retries on transient errors, and falls back to a secondary
+provider if configured.
+"""
 
 import json
 from dataclasses import dataclass
 from typing import Optional
 
-import httpx
-
-from krankenfahrt.config import config
+from krankenfahrt.resilience.llm_fallback import call_with_fallback
+from krankenfahrt.resilience.rate_limiter import get_global_limiter
 
 NLU_SYSTEM_PROMPT = """Du bist ein Agent für Krankentransport-Buchungen. 
 Extrahiere aus Patientennachrichten strukturierte Buchungsdaten.
@@ -58,46 +62,46 @@ class BookingIntent:
 
 
 async def extract_booking_intent(message: str) -> BookingIntent:
-    """Extract structured booking data from a natural language message."""
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{config.DEEPSEEK_BASE_URL}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {config.DEEPSEEK_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "deepseek-chat",
-                "messages": [
-                    {"role": "system", "content": NLU_SYSTEM_PROMPT},
-                    {"role": "user", "content": message},
-                ],
-                "temperature": 0.0,
-                "max_tokens": 300,
-            },
-            timeout=15.0,
-        )
-        response.raise_for_status()
-        data = response.json()
-        content = data["choices"][0]["message"]["content"]
+    """Extract structured booking data from a natural language message.
 
-        # Parse JSON from response (handle markdown code blocks)
-        content = content.strip()
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
-        content = content.strip()
+    Uses the LLM fallback chain: tries primary provider, retries on
+    transient errors, falls back to secondary provider if configured,
+    and rate-limits outbound API calls via token bucket.
+    """
+    messages = [
+        {"role": "system", "content": NLU_SYSTEM_PROMPT},
+        {"role": "user", "content": message},
+    ]
 
-        parsed = json.loads(content)
-        return BookingIntent(
-            action=parsed.get("action", "other"),
-            pickup_date=parsed.get("pickup_date"),
-            pickup_time=parsed.get("pickup_time"),
-            return_time=parsed.get("return_time"),
-            dest=parsed.get("dest"),
-            days=parsed.get("days"),
-            duration_min=parsed.get("duration_min"),
-            reason=parsed.get("reason"),
-            confidence=parsed.get("confidence", 0.0),
-        )
+    limiter = get_global_limiter()
+
+    data = await call_with_fallback(
+        messages,
+        model=None,  # use provider defaults
+        temperature=0.0,
+        max_tokens=300,
+        rate_limiter=limiter,
+    )
+
+    content = data["choices"][0]["message"]["content"]
+
+    # Parse JSON from response (handle markdown code blocks)
+    content = content.strip()
+    if content.startswith("```"):
+        content = content.split("```")[1]
+        if content.startswith("json"):
+            content = content[4:]
+    content = content.strip()
+
+    parsed = json.loads(content)
+    return BookingIntent(
+        action=parsed.get("action", "other"),
+        pickup_date=parsed.get("pickup_date"),
+        pickup_time=parsed.get("pickup_time"),
+        return_time=parsed.get("return_time"),
+        dest=parsed.get("dest"),
+        days=parsed.get("days"),
+        duration_min=parsed.get("duration_min"),
+        reason=parsed.get("reason"),
+        confidence=parsed.get("confidence", 0.0),
+    )

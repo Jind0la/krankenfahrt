@@ -49,6 +49,10 @@ class Driver(Model):
     work_days = fields.CharField(max_length=50, default="Mo,Di,Mi,Do,Fr")  # Comma-separated
     active = fields.BooleanField(default=True)
 
+    # Last known GPS position (updated by driver bot location sharing)
+    location_lat = fields.FloatField(null=True)
+    location_lon = fields.FloatField(null=True)
+
     vehicle: fields.ForeignKeyRelation[Vehicle] = fields.ForeignKeyField(
         "models.Vehicle", related_name="driver", null=True
     )
@@ -149,3 +153,45 @@ class DriverBreak(Model):
 
     class Meta:
         table = "driver_breaks"
+
+
+class Escalation(Model):
+    """Escalation record for a trip — tracks trigger, options chosen, and resolution.
+
+    Each escalation is linked to a trip and records:
+    - What triggered it (timeout, manual, system)
+    - Current status (open, acknowledged, resolved)
+    - Which option the chef chose (reassign, pause, cancel, acknowledge, resolve)
+    - Resolution details and timestamps
+
+    The full history of escalation events for a trip is queryable via
+    Escalation.filter(trip_id=...).order_by('created_at').
+    """
+    id = fields.IntField(pk=True)
+
+    # Which trip is escalated
+    trip: fields.ForeignKeyRelation[Trip] = fields.ForeignKeyField(
+        "models.Trip", related_name="escalations"
+    )
+
+    # What triggered the escalation
+    trigger_reason = fields.CharField(max_length=50)  # timeout | manual | system
+    trigger_detail = fields.TextField(null=True)  # Human-readable reason (e.g. "30 min ohne Status-Update")
+
+    # Current status of this escalation
+    status = fields.CharField(max_length=30, default="open")  # open | acknowledged | resolved
+
+    # Which option the chef chose (null until a decision is made)
+    chosen_option = fields.CharField(max_length=50, null=True)  # reassign | pause | cancel | acknowledge | resolve
+
+    # Who resolved it and how
+    resolved_by_telegram_id = fields.BigIntField(null=True)  # Chef's Telegram ID
+    resolution_note = fields.TextField(null=True)
+
+    # Timestamps
+    created_at = fields.DatetimeField(auto_now_add=True)
+    acknowledged_at = fields.DatetimeField(null=True)
+    resolved_at = fields.DatetimeField(null=True)
+
+    class Meta:
+        table = "escalations"

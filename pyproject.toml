@@ -7,7 +7,7 @@ name = "krankenfahrt"
 version = "0.1.0"
 description = "AI-first medical transport dispatch system — three Telegram bots replacing the human dispatcher"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
     { name = "Nimar Moradbakhti", email = "nimar@moradbakhti.com" }
@@ -54,13 +54,13 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 strict = false
 warn_return_any = true
 warn_unused_configs = true

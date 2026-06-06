@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 
 from telegram.ext import Application
 
-from krankenfahrt.models.schema import Driver, DriverBreak, Trip
+from krankenfahrt.models.schema import Driver, Trip
 
 logger = logging.getLogger(__name__)
 

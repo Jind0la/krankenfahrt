@@ -1,12 +1,10 @@
 """Basic smoke tests for configuration and imports."""
 
 import os
-import sys
 
 
 def test_config_defaults():
     """Config can be imported and has expected attributes."""
-    # Ensure env vars for required secrets are set for import
     os.environ.setdefault("PATIENT_BOT_TOKEN", "test_patient_token")
     os.environ.setdefault("DRIVER_BOT_TOKEN", "test_driver_token")
     os.environ.setdefault("CHEF_BOT_TOKEN", "test_chef_token")
@@ -18,6 +16,10 @@ def test_config_defaults():
     assert config.DATABASE_URL.startswith("sqlite://")
     assert config.DISPATCH_MODE == "greedy"
     assert config.LOG_LEVEL == "INFO"
+    assert config.HEALTH_HOST == "0.0.0.0"
+    assert config.HEALTH_PORT == 8080
+    assert config.WHISPER_DEVICE == "cpu"
+    assert config.ADMIN_TELEGRAM_IDS == []
 
 
 def test_imports_resolve():
@@ -32,3 +34,5 @@ def test_imports_resolve():
     import krankenfahrt.core.state_machine
     import krankenfahrt.models.schema
     import krankenfahrt.services.geo
+    import krankenfahrt.logging_setup
+    import krankenfahrt.metrics_server

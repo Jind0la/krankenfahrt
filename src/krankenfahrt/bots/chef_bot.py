@@ -264,11 +264,14 @@ async def _handle_driver_add(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     try:
-        driver = await Driver.create(
-            telegram_id=0,  # No Telegram account linked yet
-            name=name,
-            phone=phone,
-            active=True,
+        driver = await db_retry(
+            lambda: Driver.create(
+                telegram_id=0,  # No Telegram account linked yet
+                name=name,
+                phone=phone,
+                active=True,
+            ),
+            operation_name="driver_create",
         )
         logger.info("Driver created", driver_id=driver.id, name=name)
 
@@ -371,7 +374,7 @@ async def _handle_driver_update(
         new_name = " ".join(args[2:])
         old_name = driver.name
         driver.name = new_name
-        await driver.save()
+        await db_retry(lambda: driver.save(), operation_name="driver_save_name")
         await update.message.reply_text(
             f"✅ Fahrer *{old_name}* umbenannt zu *{new_name}*.",
             parse_mode="Markdown",
@@ -388,7 +391,7 @@ async def _handle_driver_update(
         new_phone = args[2]
         old_phone = driver.phone
         driver.phone = new_phone
-        await driver.save()
+        await db_retry(lambda: driver.save(), operation_name="driver_save_phone")
         await update.message.reply_text(
             f"✅ Telefon von *{driver.name}* aktualisiert:\n"
             f"`{old_phone}` → `{new_phone}`",
@@ -397,7 +400,7 @@ async def _handle_driver_update(
 
     elif field == "activate":
         driver.active = True
-        await driver.save()
+        await db_retry(lambda: driver.save(), operation_name="driver_save_activate")
         await update.message.reply_text(
             f"✅ Fahrer *{driver.name}* ist jetzt *aktiv*.",
             parse_mode="Markdown",
@@ -405,7 +408,7 @@ async def _handle_driver_update(
 
     elif field == "deactivate":
         driver.active = False
-        await driver.save()
+        await db_retry(lambda: driver.save(), operation_name="driver_save_deactivate")
         await update.message.reply_text(
             f"✅ Fahrer *{driver.name}* wurde *deaktiviert*.",
             parse_mode="Markdown",
@@ -438,7 +441,7 @@ async def _handle_driver_update(
                 parse_mode="Markdown",
             )
             return
-        await driver.save()
+        await db_retry(lambda: driver.save(), operation_name="driver_save_pschein")
 
     else:
         await update.message.reply_text(
@@ -499,7 +502,7 @@ async def _handle_driver_delete(
 
     # Soft-delete: deactivate rather than hard-delete to preserve trip history
     driver.active = False
-    await driver.save()
+    await db_retry(lambda: driver.save(), operation_name="driver_save_delete_deactivate")
 
     logger.info("Driver deactivated", driver_id=driver.id, name=driver.name)
 
@@ -601,11 +604,14 @@ async def _handle_vehicle_add(
         return
 
     try:
-        vehicle = await Vehicle.create(
-            license_plate=plate.upper(),
-            vehicle_type=vehicle_type,
-            capacity=1,
-            notes=make_model,
+        vehicle = await db_retry(
+            lambda: Vehicle.create(
+                license_plate=plate.upper(),
+                vehicle_type=vehicle_type,
+                capacity=1,
+                notes=make_model,
+            ),
+            operation_name="vehicle_create",
         )
         logger.info("Vehicle created", vehicle_id=vehicle.id, plate=plate)
 
@@ -710,7 +716,7 @@ async def _handle_vehicle_update(
             return
         old_type = vehicle.vehicle_type
         vehicle.vehicle_type = new_type
-        await vehicle.save()
+        await db_retry(lambda: vehicle.save(), operation_name="vehicle_save")
         await update.message.reply_text(
             f"✅ Typ von *{vehicle.license_plate}* aktualisiert:\n"
             f"`{old_type}` → `{new_type}`",
@@ -736,7 +742,7 @@ async def _handle_vehicle_update(
             return
         old_plate = vehicle.license_plate
         vehicle.license_plate = new_plate
-        await vehicle.save()
+        await db_retry(lambda: vehicle.save(), operation_name="vehicle_save")
         await update.message.reply_text(
             f"✅ Kennzeichen aktualisiert:\n`{old_plate}` → `{new_plate}`",
             parse_mode="Markdown",
@@ -759,7 +765,7 @@ async def _handle_vehicle_update(
             return
         old_cap = vehicle.capacity
         vehicle.capacity = new_cap
-        await vehicle.save()
+        await db_retry(lambda: vehicle.save(), operation_name="vehicle_save")
         await update.message.reply_text(
             f"✅ Kapazität von *{vehicle.license_plate}* aktualisiert:\n"
             f"`{old_cap}` → `{new_cap}`",
@@ -770,7 +776,7 @@ async def _handle_vehicle_update(
         if not value_args:
             # Clear notes
             vehicle.notes = None
-            await vehicle.save()
+            await db_retry(lambda: vehicle.save(), operation_name="vehicle_save")
             await update.message.reply_text(
                 f"✅ Notiz für *{vehicle.license_plate}* gelöscht.",
                 parse_mode="Markdown",
@@ -778,7 +784,7 @@ async def _handle_vehicle_update(
             return
         new_notes = " ".join(value_args)
         vehicle.notes = new_notes
-        await vehicle.save()
+        await db_retry(lambda: vehicle.save(), operation_name="vehicle_save")
         await update.message.reply_text(
             f"✅ Notiz für *{vehicle.license_plate}* aktualisiert:\n"
             f"`{new_notes}`",
@@ -846,7 +852,7 @@ async def _handle_vehicle_delete(
     plate = vehicle.license_plate
     vehicle_id_saved = vehicle.id
 
-    await vehicle.delete()
+    await db_retry(lambda: vehicle.delete(), operation_name="vehicle_delete")
 
     logger.info("Vehicle deleted", vehicle_id=vehicle_id_saved, plate=plate)
 
@@ -857,17 +863,288 @@ async def _handle_vehicle_delete(
 
 
 # =============================================================================
+# /dashboard — Daily Trip Dashboard with Color-Coded Status + Manual Assignment
+# =============================================================================
+
+# Status color coding (emoji + label)
+STATUS_EMOJI: dict[str, str] = {
+    "geplant": "🔴",
+    "zugewiesen": "🟡",
+    "anfahrt": "🔵",
+    "angekommen": "🔵",
+    "patient_an_bord": "🔵",
+    "unterwegs": "🔵",
+    "abgesetzt": "🟠",
+    "abgeschlossen": "🟢",
+    "storniert": "⚫",
+    "problem": "🔴",
+}
+
+STATUS_LABEL: dict[str, str] = {
+    "geplant": "Geplant",
+    "zugewiesen": "Zugewiesen",
+    "anfahrt": "Anfahrt",
+    "angekommen": "Angekommen",
+    "patient_an_bord": "Patient an Bord",
+    "unterwegs": "Unterwegs",
+    "abgesetzt": "Abgesetzt",
+    "abgeschlossen": "Abgeschlossen",
+    "storniert": "Storniert",
+    "problem": "Problem",
+}
+
+# Which statuses allow manual assignment
+ASSIGNABLE_STATUSES = frozenset({"geplant"})
+
+
+def _format_trip_line(trip) -> str:
+    """Format a single trip as a compact, color-coded line.
+
+    Returns a markdown-formatted line with status emoji, trip ID, patient name,
+    route, scheduled time, and driver.
+    """
+    emoji = STATUS_EMOJI.get(trip.status, "❓")
+    label = STATUS_LABEL.get(trip.status, trip.status)
+
+    patient_name = trip.patient.name if trip.patient else "?"
+    pickup = trip.pickup_addr or "?"
+    dest = trip.dest_addr or "?"
+    pickup_time = (
+        trip.scheduled_pickup.strftime("%H:%M")
+        if trip.scheduled_pickup
+        else "??:??"
+    )
+    driver_name = trip.driver.name if trip.driver else "Kein Fahrer"
+
+    return (
+        f"{emoji} *\\#{trip.id}* | {pickup_time} | {patient_name}\\n"
+        f"  {pickup} → {dest}\\n"
+        f"  _{label}_ · 🧑 {driver_name}"
+    )
+
+
+def _build_dashboard_text(trips: list, display_date: date) -> str:
+    """Build the full dashboard message text from a list of trips.
+
+    Includes a header with date, summary counts by status, then each trip line.
+    """
+    date_str = display_date.strftime("%d.%m.%Y")
+    header = f"🚑 *Tages-Dashboard — {date_str}*"
+
+    if not trips:
+        return f"{header}\\n\\n_✅ Keine Fahrten für heute._"
+
+    # Summary counts
+    counts: dict[str, int] = {}
+    for t in trips:
+        label = STATUS_LABEL.get(t.status, t.status)
+        counts[label] = counts.get(label, 0) + 1
+
+    summary = " · ".join(f"{label}: {n}" for label, n in sorted(counts.items()))
+
+    # Trip lines
+    lines = [header, f"_{summary}_", "", "━━━━━━━━━━━━━━━━━━"]
+    for trip in sorted(trips, key=lambda t: t.scheduled_pickup or datetime.min):
+        lines.append(_format_trip_line(trip))
+        lines.append("")
+
+    return "\\n".join(lines)
+
+
+def _build_assignment_keyboard(trip, drivers: list):
+    """Build an inline keyboard for assigning a driver to a trip.
+
+    Returns a list of button rows (list of InlineKeyboardButton), or None if
+    the trip is not assignable or no drivers are available.
+    """
+    from telegram import InlineKeyboardButton
+
+    if trip.status not in ASSIGNABLE_STATUSES:
+        return None
+    if not drivers:
+        return None
+
+    # One row of driver buttons
+    row = [
+        InlineKeyboardButton(
+            text=d.name,
+            callback_data=f"assign_{trip.id}_{d.id}",
+        )
+        for d in drivers
+    ]
+    return [row]
+
+
+# --- DB helpers (testable independently) ---
+
+
+async def _fetch_todays_trips():
+    """Fetch all trips scheduled for today, with patient and driver relations."""
+    from datetime import datetime
+
+    from krankenfahrt.models.schema import Trip
+
+    now = datetime.now()
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    return await (
+        Trip.filter(scheduled_pickup__gte=day_start, scheduled_pickup__lte=day_end)
+        .prefetch_related("patient", "driver")
+        .all()
+    )
+
+
+async def _fetch_active_drivers():
+    """Fetch all active drivers."""
+    from krankenfahrt.models.schema import Driver
+
+    return await Driver.filter(active=True).all()
+
+
+async def _assign_driver(trip_id: int, driver_id: int):
+    """Assign a driver to a trip and update the trip status.
+
+    Raises ValueError if the trip or driver doesn't exist.
+    """
+    from krankenfahrt.models.schema import Driver, Trip
+
+    trip = await Trip.filter(id=trip_id).first()
+    if trip is None:
+        raise ValueError(f"Trip {trip_id} nicht gefunden")
+
+    driver = await Driver.filter(id=driver_id, active=True).first()
+    if driver is None:
+        raise ValueError(f"Fahrer {driver_id} nicht gefunden oder inaktiv")
+
+    trip.driver = driver
+    trip.status = "zugewiesen"
+    await trip.save()
+
+
+# --- Command handler ---
+
+
+@_require_admin
+async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /dashboard — show today's trips with color codes and assignment buttons."""
+    today = date.today()
+
+    await update.message.reply_text("⏳ Lade heutige Fahrten...")
+
+    try:
+        trips = await _fetch_todays_trips()
+        drivers = await _fetch_active_drivers()
+    except Exception as e:
+        logger.exception("Dashboard query failed")
+        await update.message.reply_text(
+            f"❌ Fehler beim Laden der Fahrten: {e}"
+        )
+        return
+
+    text = _build_dashboard_text(trips, today)
+
+    # Build inline keyboard for assignable trips
+    keyboard_rows = []
+    for trip in trips:
+        kb = _build_assignment_keyboard(trip, drivers)
+        if kb:
+            keyboard_rows.extend(kb)
+
+    if keyboard_rows:
+        from telegram import InlineKeyboardMarkup
+
+        reply_markup = InlineKeyboardMarkup(keyboard_rows)
+        await update.message.reply_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=reply_markup,
+        )
+    else:
+        await update.message.reply_text(text, parse_mode="Markdown")
+
+
+# --- Callback handler for assignment buttons ---
+
+
+@_require_admin
+async def cmd_assign_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle inline keyboard callback for driver assignment.
+
+    Callback data format: assign_<trip_id>_<driver_id>
+    """
+    query = update.callback_query
+    await query.answer()  # Acknowledge the button press
+
+    data = query.data or ""
+    if not data.startswith("assign_"):
+        return
+
+    parts = data.split("_")
+    if len(parts) != 3:
+        await query.edit_message_text("❌ Ungültige Zuweisungsdaten.")
+        return
+
+    try:
+        trip_id = int(parts[1])
+        driver_id = int(parts[2])
+    except ValueError:
+        await query.edit_message_text("❌ Ungültige Zuweisungsdaten.")
+        return
+
+    try:
+        await _assign_driver(trip_id, driver_id)
+    except ValueError as e:
+        await query.edit_message_text(f"❌ {e}")
+        return
+    except Exception as e:
+        logger.exception("Assignment failed")
+        await query.edit_message_text(f"❌ Fehler bei der Zuweisung: {e}")
+        return
+
+    # Refresh the dashboard after assignment
+    today = date.today()
+    trips = await _fetch_todays_trips()
+    drivers = await _fetch_active_drivers()
+    text = _build_dashboard_text(trips, today)
+
+    keyboard_rows = []
+    for trip in trips:
+        kb = _build_assignment_keyboard(trip, drivers)
+        if kb:
+            keyboard_rows.extend(kb)
+
+    if keyboard_rows:
+        from telegram import InlineKeyboardMarkup
+
+        reply_markup = InlineKeyboardMarkup(keyboard_rows)
+        await query.edit_message_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=reply_markup,
+        )
+    else:
+        await query.edit_message_text(text, parse_mode="Markdown")
+
+
+# =============================================================================
 # Handler Registration
 # =============================================================================
 
 
 def register_handlers(app: Application) -> None:
     """Register all Chef-Bot command handlers."""
+    from telegram.ext import CallbackQueryHandler
+
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("dashboard", cmd_dashboard))
     app.add_handler(CommandHandler("export", cmd_export))
     app.add_handler(CommandHandler("fahrer", cmd_fahrer))
     app.add_handler(CommandHandler("fahrzeug", cmd_fahrzeug))
+    app.add_handler(CallbackQueryHandler(cmd_assign_callback, pattern="^assign_"))
 
     logger.info(
-        "Chef-Bot handlers registered: start, export, fahrer, fahrzeug"
+        "Chef-Bot handlers registered: start, dashboard, export, fahrer, fahrzeug"
     )

@@ -11,8 +11,9 @@ from krankenfahrt.health import HealthServer, make_db_health_check
 from krankenfahrt.logging_setup import setup_logging
 from krankenfahrt.metrics_server import MetricsServer
 from krankenfahrt.models.schema import (
-    Driver, Patient, RecurringTrip, Trip, TripEvent, Vehicle,
+    Driver, DriverBreak, Escalation, Patient, RecurringTrip, Trip, TripEvent, Vehicle,
 )
+from krankenfahrt.services.morning_push import run_morning_push_loop
 
 logger = structlog.get_logger(__name__)
 
@@ -95,12 +96,17 @@ async def main() -> None:
 
     logger.info("All three bots running")
 
+    # Start morning-push background loop (sends daily 06:00 overview to drivers)
+    morning_push_task = asyncio.create_task(run_morning_push_loop(driver_bot))
+    logger.info("Morning-Push background task started")
+
     try:
         # Keep running until interrupted
         await asyncio.Event().wait()
     except (KeyboardInterrupt, SystemExit):
         logger.info("Shutting down...")
     finally:
+        morning_push_task.cancel()
         await patient_bot.stop()
         await driver_bot.stop()
         await chef_bot.stop()

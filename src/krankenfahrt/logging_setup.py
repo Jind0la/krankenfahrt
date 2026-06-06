@@ -47,46 +47,33 @@ def setup_logging() -> None:
         structlog.processors.UnicodeDecoder(),
     ]
 
-    # --- Renderer: JSON for prod, console for dev --------------------------
+    # --- Choose renderer based on LOG_FORMAT -------------------------------
     if log_format == "console":
-        structlog.configure(
-            processors=shared_processors
-            + [structlog.dev.ConsoleRenderer()],
-            context_class=dict,
-            logger_factory=structlog.PrintLoggerFactory(),
-            wrapper_class=structlog.stdlib.BoundLogger,
-            cache_logger_on_first_use=True,
-        )
+        renderer = structlog.dev.ConsoleRenderer()
     else:
-        structlog.configure(
-            processors=shared_processors
-            + [structlog.processors.JSONRenderer()],
-            context_class=dict,
-            logger_factory=structlog.stdlib.LoggerFactory(),
-            wrapper_class=structlog.stdlib.BoundLogger,
-            cache_logger_on_first_use=True,
-        )
+        renderer = structlog.processors.JSONRenderer()
 
-    # --- Ensure the stdlib root logger is at the correct level --------------
-    # structlog's LoggerFactory creates stdlib loggers under the hood, so we
-    # must configure the root handler to actually emit messages.
+    # --- Configure structlog (same factory for both paths) -------------------
+    structlog.configure(
+        processors=shared_processors
+        + [structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
+
+    # --- Set up the stdlib root handler -------------------------------------
     root = logging.getLogger()
     root.setLevel(log_level)
-
-    # Remove any pre-existing handlers so basicConfig calls elsewhere
-    # don't produce duplicate or conflicting output.
     for h in list(root.handlers):
         root.removeHandler(h)
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(log_level)
 
-    # Use a ProcessorFormatter so that structlog-processed entries are
-    # rendered through the JSONRenderer, while "foreign" log entries
-    # (from third-party libraries that use plain logging) get the same
-    # structured treatment via foreign_pre_chain.
     formatter = structlog.stdlib.ProcessorFormatter(
-        processor=structlog.processors.JSONRenderer(),
+        processor=renderer,
         foreign_pre_chain=shared_processors,
     )
     handler.setFormatter(formatter)
