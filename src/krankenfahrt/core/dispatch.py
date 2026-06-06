@@ -1,16 +1,29 @@
 """Dispatch engine — assigns trips to drivers.
 
 Phase 1: Greedy nearest-driver with time window validation.
-Phase 2: OR-Tools PDPTW (Pickup and Delivery with Time Windows).
+Phase 2: OR-Tools PDVRPTW (Pickup and Delivery with Time Windows).
+Phase 3: Advanced routing via krankenfahrt.routing module.
 """
 
 import math
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Optional
 
 from krankenfahrt.models.schema import Driver, Trip
+
+# Lazy import to avoid ortools dependency for greedy-only users
+_ORToolsSolver: Optional[type] = None
+
+
+def _get_ortools_solver():
+    global _ORToolsSolver
+    if _ORToolsSolver is None:
+        from krankenfahrt.routing.ortools_solver import OrtoolsPDVRPTWSolver
+
+        _ORToolsSolver = OrtoolsPDVRPTWSolver
+    return _ORToolsSolver
 
 
 # ---------------------------------------------------------------------------
