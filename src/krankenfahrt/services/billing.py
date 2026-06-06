@@ -1,16 +1,20 @@
 """
-Muster-4 PDF invoice generator for medical transport billing.
+Billing module: Muster-4 PDF invoices + CSV export for Abrechnungsdaten.
 
-Generates DIN-compliant invoices following the German §302 SGB V
+Generates DIN-compliant invoices following the German SGB V
 Muster-4 format for Krankentransport billing to statutory health insurance (GKV).
 
+Also provides CSV export with UTF-8-BOM for Excel-compatible billing data.
+
 Usage:
-    from krankenfahrt.services.billing import generate_muster4_invoice
-    pdf_path = generate_muster4_invoice(trips, patient, krankenkasse, invoice_number)
+    from krankenfahrt.services.billing import generate_muster4_invoice, export_billing_csv
+    pdf_path = generate_muster4_invoice(data)
+    csv_path = await export_billing_csv(filters=ExportFilters(date_from=...))
 """
 
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -128,65 +132,65 @@ def _build_styles() -> dict[str, ParagraphStyle]:
             "M4_Heading",
             parent=base["Heading2"],
             fontName=FONT_BOLD,
-            fontSize=10,
-            leading=13,
-            spaceAfter=4,
+            fontSize=9,
+            leading=12,
+            spaceAfter=3,
         ),
         "normal": ParagraphStyle(
             "M4_Normal",
             parent=base["Normal"],
             fontName=FONT_REGULAR,
-            fontSize=9,
-            leading=12,
+            fontSize=8.5,
+            leading=11,
         ),
         "small": ParagraphStyle(
             "M4_Small",
             parent=base["Normal"],
             fontName=FONT_REGULAR,
-            fontSize=7.5,
-            leading=10,
+            fontSize=7,
+            leading=9,
         ),
         "right": ParagraphStyle(
             "M4_Right",
             parent=base["Normal"],
             fontName=FONT_REGULAR,
-            fontSize=9,
-            leading=12,
+            fontSize=8.5,
+            leading=11,
             alignment=TA_RIGHT,
         ),
         "bold": ParagraphStyle(
             "M4_Bold",
             parent=base["Normal"],
             fontName=FONT_BOLD,
-            fontSize=9,
-            leading=12,
+            fontSize=8.5,
+            leading=11,
         ),
         "center": ParagraphStyle(
             "M4_Center",
             parent=base["Normal"],
             fontName=FONT_REGULAR,
-            fontSize=9,
-            leading=12,
+            fontSize=8.5,
+            leading=11,
             alignment=TA_CENTER,
         ),
         "table_header": ParagraphStyle(
             "M4_TH",
             fontName=FONT_BOLD,
-            fontSize=8,
-            leading=11,
+            fontSize=7,
+            leading=9,
             alignment=TA_CENTER,
         ),
         "table_cell": ParagraphStyle(
             "M4_TD",
             fontName=FONT_REGULAR,
-            fontSize=8,
-            leading=11,
+            fontSize=7,
+            leading=9,
         ),
         "table_cell_right": ParagraphStyle(
             "M4_TD_R",
             fontName=FONT_REGULAR,
-            fontSize=8,
-            leading=11,
+            fontSize=7,
+            leading=9,
             alignment=TA_RIGHT,
         ),
     }
@@ -198,8 +202,7 @@ def _build_styles() -> dict[str, ParagraphStyle]:
 
 # Column widths for the line-item table (A4 portrait with 20mm margins)
 #  Lfd.Nr | Datum      | Beschreibung (Abhol → Ziel, Typ) | Anzahl | Einzel € | Gesamt €
-#  -------|------------|----------------------------------|--------|----------|----------
-COL_WIDTHS = [10 * mm, 23 * mm, 83 * mm, 14 * mm, 22 * mm, 22 * mm]
+COL_WIDTHS = [8 * mm, 20 * mm, 95 * mm, 12 * mm, 20 * mm, 20 * mm]
 
 TABLE_HEADERS = [
     "Nr.",
@@ -315,12 +318,12 @@ def _build_line_item_table(data: Muster4Data) -> Table:
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8E8E8")),
                 ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.black),
                 # Body
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("FONTSIZE", (0, 0), (-1, -1), 7),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-                ("LEFTPADDING", (0, 0), (-1, -1), 3),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+                ("TOPPADDING", (0, 0), (-1, -1), 1),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                ("LEFTPADDING", (0, 0), (-1, -1), 2),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
                 # Inner grid
                 ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.Color(0.7, 0.7, 0.7)),
                 ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
@@ -502,8 +505,9 @@ def generate_muster4_invoice(
     styles = _build_styles()
     story = []
 
-    # ── Address window (for window envelope) ──────────────────────────
+    # ── Address window (for window envelope, DIN 5008) ────────────────
     story.extend(_build_recipient_block(data))
+    # Minimal spacer: recipient block itself provides enough clearance
 
     # ── Sender block + Invoice header (top area) ─────────────────────
     # Build as a two-column table: sender left, header right
@@ -563,7 +567,7 @@ def generate_muster4_invoice(
         )
     )
     story.append(patient_table)
-    story.append(Spacer(1, 5 * mm))
+    story.append(Spacer(1, 3 * mm))
 
     # ── Line item table ──────────────────────────────────────────────
     story.append(Paragraph("<b>Erbrachte Leistungen</b>", styles["heading"]))
@@ -588,11 +592,11 @@ def generate_muster4_invoice(
         )
     )
     story.append(summary_table)
-    story.append(Spacer(1, 6 * mm))
+    story.append(Spacer(1, 4 * mm))
 
     # ── Footer ───────────────────────────────────────────────────────
     story.extend(_build_footer_block())
-    story.append(Spacer(1, 6 * mm))
+    story.append(Spacer(1, 4 * mm))
 
     # Signature line
     sig_table = Table(

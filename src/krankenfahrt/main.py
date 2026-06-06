@@ -7,6 +7,7 @@ from telegram.ext import Application, ApplicationBuilder
 from tortoise import Tortoise
 
 from krankenfahrt.config import config
+from krankenfahrt.health import HealthServer, make_db_health_check
 from krankenfahrt.logging_setup import setup_logging
 from krankenfahrt.metrics_server import MetricsServer
 from krankenfahrt.models.schema import (
@@ -29,9 +30,8 @@ async def build_patient_bot() -> Application:
     """Build the @FahrGast bot for patients."""
     app = ApplicationBuilder().token(config.PATIENT_BOT_TOKEN).build()
 
-    # Handler registrieren
-    # from krankenfahrt.bots.patient_bot import register_handlers
-    # register_handlers(app)
+    from krankenfahrt.bots.patient_bot import register_handlers
+    register_handlers(app)
     return app
 
 
@@ -39,8 +39,8 @@ async def build_driver_bot() -> Application:
     """Build the @FahrLenker bot for drivers."""
     app = ApplicationBuilder().token(config.DRIVER_BOT_TOKEN).build()
 
-    # from krankenfahrt.bots.driver_bot import register_handlers
-    # register_handlers(app)
+    from krankenfahrt.bots.driver_bot import register_handlers as register_driver_handlers
+    register_driver_handlers(app)
     return app
 
 
@@ -54,21 +54,23 @@ async def build_chef_bot() -> Application:
 
 
 async def main() -> None:
-    """Start all bots + health-check / metrics HTTP server."""
+    """Start all bots + health-check HTTP server."""
     setup_logging()
 
     logger.info("Krankenfahrt starting...")
 
-    # Init database first (health server needs live DB)
+    # Init database first (health server needs it for the DB ping)
     await init_database()
     logger.info("Database initialized")
 
-    # Start the Prometheus metrics + health-check HTTP server
-    metrics_server = MetricsServer(
+    # Start health-check HTTP server with DB liveness probe
+    db_check = make_db_health_check()
+    health_server = HealthServer(
         host=config.HEALTH_HOST,
         port=config.HEALTH_PORT,
+        db_check=db_check,
     )
-    await metrics_server.start()
+    await health_server.start()
 
     # Build bots
     patient_bot = await build_patient_bot()
@@ -98,7 +100,7 @@ async def main() -> None:
         await patient_bot.shutdown()
         await driver_bot.shutdown()
         await chef_bot.shutdown()
-        await metrics_server.stop()
+        await health_server.stop()
         await Tortoise.close_connections()
 
 
