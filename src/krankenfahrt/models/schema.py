@@ -1,5 +1,7 @@
 """Tortoise ORM database models."""
 
+from datetime import time
+
 from tortoise import fields, Model
 
 
