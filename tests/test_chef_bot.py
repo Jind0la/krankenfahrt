@@ -18,13 +18,16 @@ from tortoise import Tortoise
 
 
 @pytest.fixture(autouse=True)
-def _set_env():
+def _set_env(monkeypatch):
     """Ensure required env vars exist for config import."""
-    os.environ["PATIENT_BOT_TOKEN"] = "test_patient_token"
-    os.environ["DRIVER_BOT_TOKEN"] = "test_driver_token"
-    os.environ["CHEF_BOT_TOKEN"] = "test_chef_token"
-    os.environ["DEEPSEEK_API_KEY"] = "test_deepseek_key"
-    os.environ["ADMIN_TELEGRAM_IDS"] = "111111,222222"
+    monkeypatch.setenv("PATIENT_BOT_TOKEN", "test_patient_token")
+    monkeypatch.setenv("DRIVER_BOT_TOKEN", "test_driver_token")
+    monkeypatch.setenv("CHEF_BOT_TOKEN", "test_chef_token")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test_deepseek_key")
+    monkeypatch.setenv("ADMIN_TELEGRAM_IDS", "111111,222222")
+    # Also reset the cached config value (Config is a module-level singleton)
+    from krankenfahrt.config import config as _cfg
+    monkeypatch.setattr(_cfg, "ADMIN_TELEGRAM_IDS", [111111, 222222])
 
 
 @pytest.fixture
