@@ -46,8 +46,8 @@ class Driver(Model):
     name = fields.CharField(max_length=200)
     phone = fields.CharField(max_length=50)
     p_schein = fields.BooleanField(default=False)  # Personenbeförderungsschein
-    work_hours_start = fields.TimeField(default="07:00")
-    work_hours_end = fields.TimeField(default="16:00")
+    work_hours_start = fields.TimeField(null=True)  # Default applied at application level
+    work_hours_end = fields.TimeField(null=True)  # Default applied at application level
     work_days = fields.CharField(max_length=50, default="Mo,Di,Mi,Do,Fr")  # Comma-separated
     active = fields.BooleanField(default=True)
 

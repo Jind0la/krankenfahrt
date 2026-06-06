@@ -34,7 +34,8 @@ from telegram.ext import (
 from tortoise.exceptions import DoesNotExist
 
 from krankenfahrt.config import config
-from krankenfahrt.models.schema import Patient, RecurringTrip
+from krankenfahrt.models.schema import Patient, RecurringTrip, Trip
+from krankenfahrt.services.llm import extract_booking_intent
 
 logger = logging.getLogger(__name__)
 
@@ -1081,11 +1082,11 @@ def _format_status_message(status: str, **ctx: str) -> str:
 
 
 async def push_status_update(
-    app: Application,
-    chat_id: int,
-    status: str,
-    **ctx: str,
-) -> Optional[int]:
+        app: Application,
+        chat_id: int,
+        status: str,
+        **ctx: str,
+    ) -> int | None:
     """Push a status update notification to a patient.
 
     This is the primary entry point for notifying patients about trip

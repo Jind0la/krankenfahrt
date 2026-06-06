@@ -95,7 +95,7 @@ async def test_non_admin_is_denied():
     await handler(update, ctx)
     update.message.reply_text.assert_called_once()
     call_args = update.message.reply_text.call_args[0][0]
-    assert "keine Berechtigung" in call_args.lower() or "permission" in call_args.lower()
+    assert "keine berechtigung" in call_args.lower() or "permission" in call_args.lower()
 
 
 # ---------------------------------------------------------------------------

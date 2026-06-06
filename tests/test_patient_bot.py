@@ -684,8 +684,11 @@ async def test_vorlage_new_conversation_persists_template():
         assert tpl.pickup_addr == "Home, Musterstraße 1"
         assert tpl.dest_addr == "Dialyse Zentrum"
         assert tpl.cron_days == "Mo,Mi,Fr"
-        assert tpl.pickup_time == time(8, 30)
-        assert tpl.return_time == time(12, 0)
+        # Tortoise may return tz-aware times on readback; compare normalized
+        pickup_t = tpl.pickup_time.replace(tzinfo=None) if tpl.pickup_time.tzinfo else tpl.pickup_time
+        return_t = tpl.return_time.replace(tzinfo=None) if tpl.return_time.tzinfo else tpl.return_time
+        assert pickup_t == time(8, 30)
+        assert return_t == time(12, 0)
         assert tpl.vehicle_type == "Liege"
 
     finally:
@@ -828,3 +831,222 @@ async def test_format_template_includes_all_fields():
 
     finally:
         await _close_test_db()
+
+
+# ── Booking Flow Tests ───────────────────────────────────────────────────
+
+@pytest.fixture
+async def patient_with_profile():
+    """Create a patient record for booking tests."""
+    await _init_test_db()
+    from krankenfahrt.models.schema import Patient
+    patient = await Patient.create(
+        telegram_id=555555,
+        name="Max Mustermann",
+        phone="+491****6789",
+        default_pickup_addr="Musterstraße 1, 12345 Teststadt",
+        insurance_provider="AOK",
+        insurance_number="A123456789",
+        vehicle_type="Sitz",
+    )
+    yield patient
+    await _close_test_db()
+
+
+def _make_msg_update(text: str, user_id: int = 555555):
+    """Create a mock Update with message.text set."""
+    update = MagicMock()
+    update.effective_user = MagicMock()
+    update.effective_user.id = user_id
+    update.message = AsyncMock()
+    update.message.text = text
+    return update
+
+
+class TestBookingNLU:
+    """Booking via NLU: intent extraction and trip creation."""
+
+    @pytest.mark.asyncio
+    async def test_book_creates_trip(self, patient_with_profile):
+        """A complete booking message creates a Trip."""
+        from krankenfahrt.bots.patient_bot import handle_booking_message
+        from krankenfahrt.models.schema import Trip
+        from krankenfahrt.services.llm import BookingIntent
+
+        update = _make_msg_update("Morgen 8 Uhr zur Dialyse Klinikum Nord")
+        intent = BookingIntent(
+            action="book", pickup_date="2026-06-07", pickup_time="08:00",
+            dest="Klinikum Nord", return_time=None, reason="Dialyse", confidence=0.95,
+        )
+        with patch("krankenfahrt.bots.patient_bot.extract_booking_intent",
+                   AsyncMock(return_value=intent)):
+            await handle_booking_message(update, MagicMock())
+
+        trips = await Trip.filter(patient_id=patient_with_profile.id)
+        assert len(trips) == 1
+        assert "Klinikum Nord" in trips[0].dest_addr
+
+    @pytest.mark.asyncio
+    async def test_book_sends_confirmation(self, patient_with_profile):
+        """After booking, patient receives a confirmation."""
+        from krankenfahrt.bots.patient_bot import handle_booking_message
+        from krankenfahrt.services.llm import BookingIntent
+
+        update = _make_msg_update("Morgen 10 Uhr Physio Zentrum")
+        intent = BookingIntent(
+            action="book", pickup_date="2026-06-07", pickup_time="10:00",
+            dest="Physio Zentrum", confidence=0.95,
+        )
+        with patch("krankenfahrt.bots.patient_bot.extract_booking_intent",
+                   AsyncMock(return_value=intent)):
+            await handle_booking_message(update, MagicMock())
+
+        update.message.reply_text.assert_called()
+        call_text = update.message.reply_text.call_args[0][0]
+        assert "gebucht" in call_text.lower() or "bestätigt" in call_text.lower() or "Fahrt" in call_text
+
+    @pytest.mark.asyncio
+    async def test_book_missing_date_prompts(self, patient_with_profile):
+        """Missing pickup_date → bot asks for clarification."""
+        from krankenfahrt.bots.patient_bot import handle_booking_message
+        from krankenfahrt.services.llm import BookingIntent
+
+        update = _make_msg_update("Bitte eine Fahrt zur Dialyse")
+        intent = BookingIntent(action="book", pickup_date=None, pickup_time=None,
+                               dest="Dialyse", confidence=0.70)
+        with patch("krankenfahrt.bots.patient_bot.extract_booking_intent",
+                   AsyncMock(return_value=intent)):
+            await handle_booking_message(update, MagicMock())
+
+        call_text = update.message.reply_text.call_args[0][0]
+        assert any(w in call_text.lower() for w in ["wann", "datum", "uhrzeit", "zeit"])
+
+    @pytest.mark.asyncio
+    async def test_book_missing_dest_prompts(self, patient_with_profile):
+        """Missing dest → bot asks for destination."""
+        from krankenfahrt.bots.patient_bot import handle_booking_message
+        from krankenfahrt.services.llm import BookingIntent
+
+        update = _make_msg_update("Morgen um 9 Uhr")
+        intent = BookingIntent(action="book", pickup_date="2026-06-07",
+                               pickup_time="09:00", dest=None, confidence=0.60)
+        with patch("krankenfahrt.bots.patient_bot.extract_booking_intent",
+                   AsyncMock(return_value=intent)):
+            await handle_booking_message(update, MagicMock())
+
+        call_text = update.message.reply_text.call_args[0][0]
+        assert any(w in call_text.lower() for w in ["wohin", "ziel", "adresse"])
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_asks_rephrase(self, patient_with_profile):
+        """Low confidence → bot asks patient to rephrase."""
+        from krankenfahrt.bots.patient_bot import handle_booking_message
+        from krankenfahrt.services.llm import BookingIntent
+
+        update = _make_msg_update("xyz blabla unverständlich")
+        intent = BookingIntent(action="other", confidence=0.25)
+        with patch("krankenfahrt.bots.patient_bot.extract_booking_intent",
+                   AsyncMock(return_value=intent)):
+            await handle_booking_message(update, MagicMock())
+
+        call_text = update.message.reply_text.call_args[0][0]
+        assert any(w in call_text.lower()
+                   for w in ["verstehe", "verstanden", "wiederholen", "anders", "beispiel", "helfen"])
+
+    @pytest.mark.asyncio
+    async def test_info_intent_shows_upcoming(self, patient_with_profile):
+        """'info' action shows upcoming trips."""
+        from krankenfahrt.bots.patient_bot import handle_booking_message
+        from krankenfahrt.services.llm import BookingIntent
+        from krankenfahrt.models.schema import Trip
+        from datetime import datetime, timedelta
+
+        tomorrow = datetime.now() + timedelta(days=1)
+        await Trip.create(
+            patient_id=patient_with_profile.id,
+            pickup_addr=patient_with_profile.default_pickup_addr,
+            dest_addr="Klinikum Test",
+            scheduled_pickup=tomorrow,
+            status="geplant",
+        )
+
+        update = _make_msg_update("Habe ich morgen eine Fahrt?")
+        intent = BookingIntent(action="info", confidence=0.85)
+        with patch("krankenfahrt.bots.patient_bot.extract_booking_intent",
+                   AsyncMock(return_value=intent)):
+            await handle_booking_message(update, MagicMock())
+
+        call_text = update.message.reply_text.call_args[0][0]
+        assert "Klinikum Test" in call_text or "Fahrt" in call_text
+
+    @pytest.mark.asyncio
+    async def test_other_intent_redirected(self, patient_with_profile):
+        """Non-booking message → friendly redirect."""
+        from krankenfahrt.bots.patient_bot import handle_booking_message
+        from krankenfahrt.services.llm import BookingIntent
+
+        update = _make_msg_update("Der Fahrer war super nett!")
+        intent = BookingIntent(action="other", confidence=0.90)
+        with patch("krankenfahrt.bots.patient_bot.extract_booking_intent",
+                   AsyncMock(return_value=intent)):
+            await handle_booking_message(update, MagicMock())
+
+        update.message.reply_text.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_unregistered_patient_guided(self):
+        """Unregistered patient is guided to /start before booking."""
+        await _init_test_db()
+        try:
+            from krankenfahrt.bots.patient_bot import handle_booking_message
+            from krankenfahrt.services.llm import BookingIntent
+
+            update = _make_msg_update("Morgen 8 Uhr zur Dialyse", user_id=999999)
+            intent = BookingIntent(
+                action="book", pickup_date="2026-06-07", pickup_time="08:00",
+                dest="Dialyse Zentrum", confidence=0.95,
+            )
+            with patch("krankenfahrt.bots.patient_bot.extract_booking_intent",
+                       AsyncMock(return_value=intent)):
+                await handle_booking_message(update, MagicMock())
+
+            call_text = update.message.reply_text.call_args[0][0]
+            assert "registr" in call_text.lower() or "/start" in call_text or "anmelden" in call_text.lower()
+        finally:
+            await _close_test_db()
+
+    @pytest.mark.asyncio
+    async def test_nlu_failure_graceful(self, patient_with_profile):
+        """DeepSeek API failure → graceful error message."""
+        from krankenfahrt.bots.patient_bot import handle_booking_message
+
+        update = _make_msg_update("Morgen 8 Uhr zur Dialyse")
+        with patch("krankenfahrt.bots.patient_bot.extract_booking_intent",
+                   AsyncMock(side_effect=Exception("Connection refused"))):
+            await handle_booking_message(update, MagicMock())
+
+        update.message.reply_text.assert_called_once()
+        call_text = update.message.reply_text.call_args[0][0]
+        assert any(w in call_text.lower()
+                   for w in ["fehler", "später", "gerade nicht", "problem", "entschuldigen"])
+
+    @pytest.mark.asyncio
+    async def test_book_with_return_time_creates_return_trip(self, patient_with_profile):
+        """A booking with return_time creates two trips (outbound + return)."""
+        from krankenfahrt.bots.patient_bot import handle_booking_message
+        from krankenfahrt.models.schema import Trip
+        from krankenfahrt.services.llm import BookingIntent
+
+        update = _make_msg_update("Morgen 8 Uhr Dialyse Klinikum Nord, Rückfahrt 12:30")
+        intent = BookingIntent(
+            action="book", pickup_date="2026-06-07", pickup_time="08:00",
+            dest="Klinikum Nord", return_time="12:30", reason="Dialyse", confidence=0.95,
+        )
+        with patch("krankenfahrt.bots.patient_bot.extract_booking_intent",
+                   AsyncMock(return_value=intent)):
+            await handle_booking_message(update, MagicMock())
+
+        trips = await Trip.filter(patient_id=patient_with_profile.id).all()
+        assert len(trips) == 2  # outbound + return
+        assert any(t.dest_addr == "Klinikum Nord" for t in trips)
+        assert any(patient_with_profile.default_pickup_addr in t.dest_addr for t in trips)

@@ -3,7 +3,7 @@
 Commands:
   /start      — Show available commands
   /dashboard  — Daily overview of all trips
-  /export     — CSV export of billing data for a time period
+  /export     — Export billing data (CSV or Muster-4 PDF invoice)
   /fahrer     — Driver management (create, list, update, delete)
   /fahrzeug   — Vehicle management (create, list, update, delete)
 """
@@ -19,9 +19,13 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 from krankenfahrt.config import config
-from krankenfahrt.models.schema import Driver, Vehicle
+from krankenfahrt.models.schema import Driver, Patient, Vehicle
 from krankenfahrt.resilience.db_retry import db_retry
-from krankenfahrt.services.billing import ExportFilters, export_billing_csv
+from krankenfahrt.services.billing import (
+    ExportFilters,
+    export_billing_csv,
+    generate_invoice_for_trips,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -108,8 +112,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "🚑 *FahrtenChef* — Dein Disponenten-Cockpit\n\n"
         "Verfügbare Befehle:\n"
         "/dashboard — Heutige Fahrten im Überblick\n"
-        "/export \\[von] \\[bis] — Abrechnungs-CSV exportieren\n"
-        "  z.B. `/export 01.06.2026 30.06.2026`\n"
+        "/export csv \\[von] \\[bis] — Abrechnungs-CSV exportieren\n"
+        "  z.B. `/export csv 01.06.2026 30.06.2026`\n"
+        "/export pdf <Patient-ID> \\[von] \\[bis] — Muster-4 PDF-Rechnung\n"
+        "  z.B. `/export pdf 1 01.06.2026 30.06.2026`\n"
         "/fahrer — Fahrerverwaltung\n"
         "/fahrzeug — Fahrzeugverwaltung",
         parse_mode="Markdown",
@@ -585,7 +591,7 @@ async def _handle_vehicle_add(
 
     # Last required arg is license plate; optional vehicle type after that
     if len(args) >= 4 and args[3].upper() in ("SITZ", "LIEGE", "RAD", "KTW"):
-        vehicle_type = args[3].capitalize()
+        vehicle_type = args[3].upper()
         plate = args[2]
         make_model = " ".join(args[:2])
     else:

@@ -40,8 +40,9 @@ voice = ["faster-whisper>=1.0"]
 routing = ["ortools>=9.0"]
 billing = ["reportlab>=4.0"]
 dev = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.24",
+    "pytest>=9.0",
+    "pytest-asyncio>=1.0",
+    "respx>=0.22",
     "ruff>=0.8",
     "mypy>=1.0",
 ]

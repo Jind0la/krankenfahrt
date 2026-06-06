@@ -228,9 +228,9 @@ class TripStateMachine:
     def on_exit_geplant(self, event: Any) -> None:
         self._record_callback("on_exit_geplant", "geplant", False)
         self._emit_event(
-            trigger=getattr(event, "event", None) or getattr(event, "name", "?"),
+            trigger=event.event.name,
             from_state="geplant",
-            to_state=getattr(event.state, "name", "?") if hasattr(event, "state") else "?",
+            to_state=event.transition.dest,
         )
 
     # ── callbacks: zugewiesen ────────────────────────────────────────
@@ -241,9 +241,9 @@ class TripStateMachine:
     def on_exit_zugewiesen(self, event: Any) -> None:
         self._record_callback("on_exit_zugewiesen", "zugewiesen", False)
         self._emit_event(
-            trigger=getattr(event, "event", None) or getattr(event, "name", "?"),
+            trigger=event.event.name,
             from_state="zugewiesen",
-            to_state=getattr(event.state, "name", "?") if hasattr(event, "state") else "?",
+            to_state=event.transition.dest,
         )
 
     # ── callbacks: anfahrt ───────────────────────────────────────────
@@ -255,9 +255,9 @@ class TripStateMachine:
     def on_exit_anfahrt(self, event: Any) -> None:
         self._record_callback("on_exit_anfahrt", "anfahrt", False)
         self._emit_event(
-            trigger=getattr(event, "event", None) or getattr(event, "name", "?"),
+            trigger=event.event.name,
             from_state="anfahrt",
-            to_state=getattr(event.state, "name", "?") if hasattr(event, "state") else "?",
+            to_state=event.transition.dest,
         )
 
     # ── callbacks: angekommen ────────────────────────────────────────
@@ -269,9 +269,9 @@ class TripStateMachine:
     def on_exit_angekommen(self, event: Any) -> None:
         self._record_callback("on_exit_angekommen", "angekommen", False)
         self._emit_event(
-            trigger=getattr(event, "event", None) or getattr(event, "name", "?"),
+            trigger=event.event.name,
             from_state="angekommen",
-            to_state=getattr(event.state, "name", "?") if hasattr(event, "state") else "?",
+            to_state=event.transition.dest,
         )
 
     # ── callbacks: patient_an_bord ───────────────────────────────────
@@ -283,9 +283,9 @@ class TripStateMachine:
     def on_exit_patient_an_bord(self, event: Any) -> None:
         self._record_callback("on_exit_patient_an_bord", "patient_an_bord", False)
         self._emit_event(
-            trigger=getattr(event, "event", None) or getattr(event, "name", "?"),
+            trigger=event.event.name,
             from_state="patient_an_bord",
-            to_state=getattr(event.state, "name", "?") if hasattr(event, "state") else "?",
+            to_state=event.transition.dest,
         )
 
     # ── callbacks: unterwegs ─────────────────────────────────────────
@@ -297,9 +297,9 @@ class TripStateMachine:
     def on_exit_unterwegs(self, event: Any) -> None:
         self._record_callback("on_exit_unterwegs", "unterwegs", False)
         self._emit_event(
-            trigger=getattr(event, "event", None) or getattr(event, "name", "?"),
+            trigger=event.event.name,
             from_state="unterwegs",
-            to_state=getattr(event.state, "name", "?") if hasattr(event, "state") else "?",
+            to_state=event.transition.dest,
         )
 
     # ── callbacks: abgesetzt ─────────────────────────────────────────
@@ -311,9 +311,9 @@ class TripStateMachine:
     def on_exit_abgesetzt(self, event: Any) -> None:
         self._record_callback("on_exit_abgesetzt", "abgesetzt", False)
         self._emit_event(
-            trigger=getattr(event, "event", None) or getattr(event, "name", "?"),
+            trigger=event.event.name,
             from_state="abgesetzt",
-            to_state=getattr(event.state, "name", "?") if hasattr(event, "state") else "?",
+            to_state=event.transition.dest,
         )
 
     # ── callbacks: abgeschlossen ─────────────────────────────────────
@@ -326,9 +326,9 @@ class TripStateMachine:
         # Should never happen — abgeschlossen is terminal
         self._record_callback("on_exit_abgeschlossen", "abgeschlossen", False)
         self._emit_event(
-            trigger=getattr(event, "event", None) or getattr(event, "name", "?"),
+            trigger=event.event.name,
             from_state="abgeschlossen",
-            to_state=getattr(event.state, "name", "?") if hasattr(event, "state") else "?",
+            to_state=event.transition.dest,
         )
 
     # ── callbacks: storniert ─────────────────────────────────────────
@@ -341,9 +341,9 @@ class TripStateMachine:
         # Should never happen — storniert is terminal
         self._record_callback("on_exit_storniert", "storniert", False)
         self._emit_event(
-            trigger=getattr(event, "event", None) or getattr(event, "name", "?"),
+            trigger=event.event.name,
             from_state="storniert",
-            to_state=getattr(event.state, "name", "?") if hasattr(event, "state") else "?",
+            to_state=event.transition.dest,
         )
 
     # ── callbacks: problem ───────────────────────────────────────────
@@ -352,18 +352,14 @@ class TripStateMachine:
         """Issue flagged — remember where we came from so we can return."""
         self._record_callback("on_enter_problem", "problem", True)
         # Save the source state so problem_loesen knows where to return
-        if hasattr(event, "state") and hasattr(event.state, "source"):
-            self._pre_problem_state = event.state.source
-        # Also check event.transition.source as fallback
-        elif hasattr(event, "transition") and hasattr(event.transition, "source"):
-            self._pre_problem_state = event.transition.source
+        self._pre_problem_state = event.transition.source
 
     def on_exit_problem(self, event: Any) -> None:
         self._record_callback("on_exit_problem", "problem", False)
         self._emit_event(
-            trigger=getattr(event, "event", None) or getattr(event, "name", "?"),
+            trigger=event.event.name,
             from_state="problem",
-            to_state=getattr(event.state, "name", "?") if hasattr(event, "state") else "?",
+            to_state=event.transition.dest,
         )
         # Clear the saved previous state on exit
         self._pre_problem_state = None

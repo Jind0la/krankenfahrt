@@ -129,6 +129,7 @@ class TestEscalationServiceIntegration:
         await Tortoise.init(
             db_url="sqlite://:memory:",
             modules={"models": ["krankenfahrt.models.schema"]},
+            timezone="UTC",
         )
         await Tortoise.generate_schemas()
         yield

@@ -1,6 +1,6 @@
 """Tests for Chef-Bot dashboard: color-coded trips + manual assignment."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 import pytest
 
