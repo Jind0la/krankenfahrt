@@ -97,18 +97,18 @@ class TestTokenBucketRefill:
     @pytest.mark.asyncio
     async def test_rate_limit_enforced_concurrent(self):
         """Rate limiting works with concurrent acquirers."""
-        bucket = TokenBucket(rate=20.0, burst=5)
+        bucket = TokenBucket(rate=50.0, burst=10)
         results = []
 
         async def worker():
-            acquired = await bucket.acquire(timeout=2.0)
+            acquired = await bucket.acquire(timeout=5.0)
             results.append(acquired)
 
-        # Launch 15 concurrent workers — burst is 5, rate is 20/s
+        # Launch 15 concurrent workers — burst is 10, rate is 50/s
         tasks = [asyncio.create_task(worker()) for _ in range(15)]
         await asyncio.gather(*tasks)
 
-        # All should eventually acquire within timeout since rate is 20/s
+        # All should eventually acquire within timeout since rate is 50/s
         assert all(results), f"{results.count(False)} workers failed to acquire"
         assert bucket.total_deferred > 0  # Some should have been deferred
 

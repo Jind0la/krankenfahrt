@@ -726,3 +726,226 @@ class TestEdgeCases:
             sm.fahrer_zuweisen()
         sm.patient_absetzen()
         assert sm.state == "abgesetzt"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 11. Guard: _guard_can_assign
+# ══════════════════════════════════════════════════════════════════════════
+
+
+class TestGuardCanAssign:
+    """The _guard_can_assign guard runs before fahrer_zuweisen."""
+
+    def test_can_assign_when_driver_present(self):
+        sm = make_sm("geplant")
+        # The guard currently always returns True (MVP)
+        # but we exercise it to ensure it doesn't block valid transitions
+        sm.fahrer_zuweisen()
+        assert sm.state == "zugewiesen"
+
+    def test_guard_is_called_during_transition(self):
+        """Verify the guard is invoked as part of the fahrer_zuweisen transition."""
+        # Replace the guard with a spy to verify invocation
+        original_guard = TripStateMachine._guard_can_assign
+        called = []
+
+        def spy_guard(self, event):
+            called.append(True)
+            return original_guard(self, event)
+
+        TripStateMachine._guard_can_assign = spy_guard
+        try:
+            sm = make_sm("geplant")
+            sm.fahrer_zuweisen()
+            assert len(called) == 1
+            assert sm.state == "zugewiesen"
+        finally:
+            TripStateMachine._guard_can_assign = original_guard
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 12. Callback invocation order — exit fires before entry
+# ══════════════════════════════════════════════════════════════════════════
+
+
+class TestCallbackOrder:
+    """on_exit fires before on_enter in every transition."""
+
+    def test_exit_before_entry_on_forward_flow(self):
+        sm = make_sm("geplant")
+        sm.fahrer_zuweisen()
+        # First callback should be exit, second should be entry
+        assert sm._callback_calls[0]["kind"] == "exit"
+        assert sm._callback_calls[0]["state"] == "geplant"
+        assert sm._callback_calls[1]["kind"] == "entry"
+        assert sm._callback_calls[1]["state"] == "zugewiesen"
+
+    def test_exit_before_entry_on_stornieren(self):
+        sm = make_sm("anfahrt")
+        sm.stornieren()
+        assert sm._callback_calls[0]["kind"] == "exit"
+        assert sm._callback_calls[0]["state"] == "anfahrt"
+        assert sm._callback_calls[1]["kind"] == "entry"
+        assert sm._callback_calls[1]["state"] == "storniert"
+
+    def test_exit_before_entry_on_problem(self):
+        sm = make_sm("unterwegs")
+        sm.problem_melden()
+        assert sm._callback_calls[0]["kind"] == "exit"
+        assert sm._callback_calls[0]["state"] == "unterwegs"
+        assert sm._callback_calls[1]["kind"] == "entry"
+        assert sm._callback_calls[1]["state"] == "problem"
+
+    def test_exit_before_entry_on_reassign(self):
+        sm = make_sm("zugewiesen")
+        sm.fahrer_neu_zuweisen()
+        assert sm._callback_calls[0]["kind"] == "exit"
+        assert sm._callback_calls[0]["state"] == "zugewiesen"
+        assert sm._callback_calls[1]["kind"] == "entry"
+        assert sm._callback_calls[1]["state"] == "geplant"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 13. Driver-bot integration test (simulates handle_trip_callback)
+# ══════════════════════════════════════════════════════════════════════════
+
+
+class TestDriverBotIntegration:
+    """Test the pattern used by driver_bot.py: load SM, call trigger, read state."""
+
+    def test_dynamic_trigger_dispatch(self):
+        """Simulate what handle_trip_callback does: load trip → SM → trigger."""
+        triggers_sequence = [
+            "fahrer_zuweisen",
+            "losfahren",
+            "ankunft_melden",
+            "patient_aufnehmen",
+            "fahrt_beginnen",
+        ]
+        sm = make_sm("geplant")
+        for trigger in triggers_sequence:
+            getattr(sm, trigger)()  # Dynamic dispatch like driver_bot
+        assert sm.state == "unterwegs"
+
+    def test_dynamic_trigger_rejects_invalid(self):
+        """Driver pressing a button that's not valid for current state."""
+        sm = make_sm("geplant")
+        with pytest.raises(MachineError):
+            getattr(sm, "abschliessen")()  # Not valid from geplant
+
+    def test_dynamic_trigger_with_problem_flow(self):
+        """Simulate: drive → problem → resolve → continue."""
+        sm = make_sm("geplant")
+        getattr(sm, "fahrer_zuweisen")()
+        getattr(sm, "losfahren")()
+        assert sm.state == "anfahrt"
+
+        # Problem!
+        getattr(sm, "problem_melden")()
+        assert sm.state == "problem"
+        assert sm._pre_problem_state == "anfahrt"
+
+        # Resolve (custom method, not a trigger)
+        sm.problem_loesen()
+        assert sm.state == "anfahrt"
+
+        # Continue
+        getattr(sm, "ankunft_melden")()
+        assert sm.state == "angekommen"
+
+    def test_event_log_integration(self):
+        """Verify events logged during driver_bot-style transitions."""
+        sm = make_sm("geplant", trip_id=42)
+        triggers = ["fahrer_zuweisen", "losfahren", "ankunft_melden"]
+        for trigger in triggers:
+            getattr(sm, trigger)()
+
+        # 3 transitions → 3 events
+        assert len(sm._event_log) == 3
+        expected = [
+            ("geplant", "zugewiesen", "fahrer_zuweisen"),
+            ("zugewiesen", "anfahrt", "losfahren"),
+            ("anfahrt", "angekommen", "ankunft_melden"),
+        ]
+        for (frm, to, trig), evt in zip(expected, sm._event_log):
+            _assert_event(evt, frm, to, trig)
+            assert evt.trip_id == 42
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 14. State reachability — every state can be entered and exited
+# ══════════════════════════════════════════════════════════════════════════
+
+
+class TestStateReachability:
+    """Verify every non-initial state is reachable and no dead states exist."""
+
+    @pytest.mark.parametrize(
+        "state,trigger_sequence",
+        [
+            ("zugewiesen", ["fahrer_zuweisen"]),
+            ("anfahrt", ["fahrer_zuweisen", "losfahren"]),
+            ("angekommen", ["fahrer_zuweisen", "losfahren", "ankunft_melden"]),
+            (
+                "patient_an_bord",
+                ["fahrer_zuweisen", "losfahren", "ankunft_melden", "patient_aufnehmen"],
+            ),
+            (
+                "unterwegs",
+                [
+                    "fahrer_zuweisen",
+                    "losfahren",
+                    "ankunft_melden",
+                    "patient_aufnehmen",
+                    "fahrt_beginnen",
+                ],
+            ),
+            (
+                "abgesetzt",
+                [
+                    "fahrer_zuweisen",
+                    "losfahren",
+                    "ankunft_melden",
+                    "patient_aufnehmen",
+                    "fahrt_beginnen",
+                    "patient_absetzen",
+                ],
+            ),
+            (
+                "abgeschlossen",
+                [
+                    "fahrer_zuweisen",
+                    "losfahren",
+                    "ankunft_melden",
+                    "patient_aufnehmen",
+                    "fahrt_beginnen",
+                    "patient_absetzen",
+                    "abschliessen",
+                ],
+            ),
+            ("storniert", ["stornieren"]),
+            ("problem", ["fahrer_zuweisen", "problem_melden"]),
+        ],
+    )
+    def test_state_is_reachable(self, state, trigger_sequence):
+        sm = make_sm("geplant")
+        for trigger in trigger_sequence:
+            getattr(sm, trigger)()
+        assert sm.state == state
+
+    def test_all_states_listed(self):
+        """Verify TRIP_STATES list matches the 10 defined states."""
+        assert len(TRIP_STATES) == 10
+        expected = {
+            "geplant",
+            "zugewiesen",
+            "anfahrt",
+            "angekommen",
+            "patient_an_bord",
+            "unterwegs",
+            "abgesetzt",
+            "abgeschlossen",
+            "storniert",
+            "problem",
+        }
+        assert set(TRIP_STATES) == expected

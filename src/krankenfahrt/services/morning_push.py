@@ -10,7 +10,7 @@ overview via Telegram.
 
 import asyncio
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from telegram.ext import Application
 

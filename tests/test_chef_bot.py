@@ -20,11 +20,11 @@ from tortoise import Tortoise
 @pytest.fixture(autouse=True)
 def _set_env():
     """Ensure required env vars exist for config import."""
-    os.environ.setdefault("PATIENT_BOT_TOKEN", "test_patient_token")
-    os.environ.setdefault("DRIVER_BOT_TOKEN", "test_driver_token")
-    os.environ.setdefault("CHEF_BOT_TOKEN", "test_chef_token")
-    os.environ.setdefault("DEEPSEEK_API_KEY", "test_deepseek_key")
-    os.environ.setdefault("ADMIN_TELEGRAM_IDS", "111111,222222")
+    os.environ["PATIENT_BOT_TOKEN"] = "test_patient_token"
+    os.environ["DRIVER_BOT_TOKEN"] = "test_driver_token"
+    os.environ["CHEF_BOT_TOKEN"] = "test_chef_token"
+    os.environ["DEEPSEEK_API_KEY"] = "test_deepseek_key"
+    os.environ["ADMIN_TELEGRAM_IDS"] = "111111,222222"
 
 
 @pytest.fixture
@@ -205,7 +205,7 @@ async def test_driver_update_name(db):
     assert driver.name == "Alice Schmidt"
 
     response = update.message.reply_text.call_args[0][0]
-    assert "aktualisiert" in response.lower() or "updated" in response.lower()
+    assert "umbenannt" in response.lower() or "updated" in response.lower()
 
 
 @pytest.mark.asyncio
@@ -436,3 +436,179 @@ async def test_fahrer_unknown_subcommand():
     await cmd_fahrer(update, ctx)
     response = update.message.reply_text.call_args[0][0]
     assert "unbekannt" in response.lower() or "unknown" in response.lower() or "verfügbar" in response.lower()
+
+
+# ---------------------------------------------------------------------------
+# Export command tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_export_help_shows_usage():
+    """Calling /export without subcommand shows help with csv+pdf options."""
+    from krankenfahrt.bots.chef_bot import cmd_export
+
+    update = make_update(user_id=111111)
+    ctx = make_context(args=[])
+
+    await cmd_export(update, ctx)
+    response = update.message.reply_text.call_args[0][0]
+    assert "CSV" in response
+    assert "PDF" in response
+    assert "Muster-4" in response
+
+
+@pytest.mark.asyncio
+async def test_export_csv_backward_compat():
+    """Calling /export with a date (no subcommand) should still work as CSV."""
+    from krankenfahrt.bots.chef_bot import cmd_export
+
+    update = make_update(user_id=111111)
+    ctx = make_context(args=["01.06.2026", "30.06.2026"])
+
+    await cmd_export(update, ctx)
+    # Should have started CSV export (progress message)
+    update.message.reply_text.assert_called()
+    first_call = update.message.reply_text.call_args_list[0][0][0]
+    assert "Exportiere" in first_call or "export" in first_call.lower()
+
+
+@pytest.mark.asyncio
+async def test_export_unknown_subcommand():
+    """Unknown subcommand shows error with available options."""
+    from krankenfahrt.bots.chef_bot import cmd_export
+
+    update = make_update(user_id=111111)
+    ctx = make_context(args=["blah"])
+
+    await cmd_export(update, ctx)
+    response = update.message.reply_text.call_args[0][0]
+    assert "unbekannt" in response.lower() or "Unknown" in response
+    assert "CSV" in response
+
+
+@pytest.mark.asyncio
+async def test_export_pdf_invalid_patient_id(db):
+    """PDF export with non-integer patient ID shows error."""
+    from krankenfahrt.bots.chef_bot import cmd_export
+
+    update = make_update(user_id=111111)
+    ctx = make_context(args=["pdf", "abc"])
+
+    await cmd_export(update, ctx)
+    response = update.message.reply_text.call_args[0][0]
+    assert "ungültige" in response.lower() or "invalid" in response.lower()
+
+
+@pytest.mark.asyncio
+async def test_export_pdf_patient_not_found(db):
+    """PDF export for non-existent patient shows error."""
+    from krankenfahrt.bots.chef_bot import cmd_export
+
+    update = make_update(user_id=111111)
+    ctx = make_context(args=["pdf", "999"])
+
+    await cmd_export(update, ctx)
+    response = update.message.reply_text.call_args[0][0]
+    assert "nicht gefunden" in response.lower() or "not found" in response.lower()
+
+
+@pytest.mark.asyncio
+async def test_export_pdf_missing_patient_id(db):
+    """PDF export without patient ID shows usage help."""
+    from krankenfahrt.bots.chef_bot import cmd_export
+
+    update = make_update(user_id=111111)
+    ctx = make_context(args=["pdf"])
+
+    await cmd_export(update, ctx)
+    response = update.message.reply_text.call_args[0][0]
+    assert "Patient-ID" in response
+
+
+@pytest.mark.asyncio
+async def test_export_pdf_no_trips_found(db):
+    """PDF export for patient with no trips shows warning."""
+    from krankenfahrt.bots.chef_bot import cmd_export
+    from krankenfahrt.models.schema import Patient
+
+    # Create a patient with no trips
+    await Patient.create(
+        telegram_id=200001,
+        name="Test Patient",
+        default_pickup_addr="Teststr 1",
+        insurance_provider="AOK",
+        insurance_number="T123",
+    )
+    # Get the created patient (id=1 since first in DB)
+    patient = await Patient.first()
+    assert patient is not None
+
+    update = make_update(user_id=111111)
+    ctx = make_context(args=["pdf", str(patient.id)])
+
+    await cmd_export(update, ctx)
+    # First call: progress message
+    first_call = update.message.reply_text.call_args_list[0][0][0]
+    assert "erstellt" in first_call.lower() or "creating" in first_call.lower()
+
+    # Second call: no trips warning
+    second_call = update.message.reply_text.call_args_list[1][0][0]
+    assert "keine" in second_call.lower() or "no" in second_call.lower()
+
+
+@pytest.mark.asyncio
+async def test_export_pdf_with_trips(db, tmp_path):
+    """PDF export generates a valid PDF for a patient with trips."""
+    from datetime import datetime
+
+    from krankenfahrt.bots.chef_bot import _handle_export_pdf
+    from krankenfahrt.models.schema import Patient, Trip
+
+    patient = await Patient.create(
+        telegram_id=200001,
+        name="Max Mustermann",
+        default_pickup_addr="Teststraße 1, 12345 Stadt",
+        insurance_provider="AOK",
+        insurance_number="T123456789",
+    )
+
+    # Create a trip for this patient
+    await Trip.create(
+        patient=patient,
+        pickup_addr="Teststraße 1, 12345 Stadt",
+        dest_addr="Zielstraße 2, 12345 Stadt",
+        scheduled_pickup=datetime(2026, 6, 1, 10, 0),
+        fare_eur=45.00,
+        status="abgeschlossen",
+    )
+
+    update = make_update(user_id=111111)
+    ctx = make_context(args=["pdf", str(patient.id)])
+
+    # Patch PROJECT_ROOT to use tmp_path for output
+    import krankenfahrt.config as cfg
+
+    orig_root = cfg.PROJECT_ROOT
+    try:
+        cfg.PROJECT_ROOT = tmp_path
+        await _handle_export_pdf(update, ctx)
+    finally:
+        cfg.PROJECT_ROOT = orig_root
+
+    # First call: progress
+    progress = update.message.reply_text.call_args_list[0][0][0]
+    assert "erstellt" in progress.lower() or "creating" in progress.lower()
+
+    # Second call: reply_document with PDF
+    assert update.message.reply_document.called
+    doc_kwargs = update.message.reply_document.call_args[1]
+    assert "filename" in doc_kwargs
+    assert doc_kwargs["filename"].endswith(".pdf")
+
+    # Verify PDF was created on disk
+    exports_dir = tmp_path / "data" / "exports"
+    pdf_files = list(exports_dir.glob("*.pdf"))
+    assert len(pdf_files) == 1
+    with open(pdf_files[0], "rb") as f:
+        assert f.read(5) == b"%PDF-"

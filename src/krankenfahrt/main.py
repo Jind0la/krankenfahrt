@@ -51,6 +51,10 @@ async def build_chef_bot() -> Application:
 
     from krankenfahrt.bots.chef_bot import register_handlers
     register_handlers(app)
+
+    from krankenfahrt.bots.chef_bot_escalation import register_handlers as register_escalation
+    register_escalation(app)
+
     return app
 
 

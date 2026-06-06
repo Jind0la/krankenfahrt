@@ -15,7 +15,12 @@ Commands:
   /start  — Register driver or show status
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+
+
+def _now() -> datetime:
+    """Return current datetime with UTC timezone, matching Tortoise's aware storage."""
+    return datetime.now(timezone.utc)
 
 import structlog
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -197,12 +202,23 @@ async def _get_active_break(driver: Driver) -> DriverBreak | None:
 
 
 async def _get_todays_breaks(driver: Driver) -> list[DriverBreak]:
-    """All breaks this driver took today."""
+    """All breaks relevant to today's shift — includes:
+    - Breaks that started today
+    - Breaks that started yesterday but are still active (span midnight)
+    - Breaks that started yesterday and ended today (completed across midnight)
+    """
     today = date.today()
+    today_start = datetime(today.year, today.month, today.day)
+    tomorrow_start = datetime(today.year, today.month, today.day + 1)
+
+    from tortoise.expressions import Q
+
     return await DriverBreak.filter(
         driver_id=driver.id,
-        start_time__gte=datetime(today.year, today.month, today.day),
-        start_time__lt=datetime(today.year, today.month, today.day + 1),
+    ).filter(
+        Q(start_time__gte=today_start, start_time__lt=tomorrow_start)
+        | Q(end_time__gte=today_start, end_time__lt=tomorrow_start)
+        | Q(start_time__lt=today_start, end_time__isnull=True)
     ).order_by("start_time")
 
 
@@ -337,7 +353,7 @@ async def cmd_pause(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if active_break is None:
         # ── START BREAK ──
         new_break = await DriverBreak.create(
-            driver=driver, start_time=datetime.now()
+            driver=driver, start_time=_now()
         )
         logger.info(
             "Driver %s (id=%d) started break at %s",
@@ -350,7 +366,7 @@ async def cmd_pause(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
     else:
         # ── END BREAK ──
-        now = datetime.now()
+        now = _now()
         active_break.end_time = now
         await active_break.save()
 
@@ -432,9 +448,10 @@ async def handle_trip_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     previous_state = trip.status
     try:
         sm = TripStateMachine(trip)
-        # Trigger the transition on the state machine model.
-        # The `transitions` library dynamically adds trigger methods to the model.
-        getattr(sm, "trigger")(trigger)  # sm.trigger(trigger) at runtime
+        # Trigger the transition directly on the state machine model.
+        # The `transitions` library dynamically adds trigger methods to the model
+        # (e.g. sm.losfahren(), sm.abschliessen()). We use getattr for dynamic dispatch.
+        getattr(sm, trigger)()
         new_state = sm.state  # type: ignore[attr-defined]
     except Exception as exc:
         logger.exception(
@@ -679,13 +696,13 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         ).first()
 
         if active_break is None:
-            await DriverBreak.create(driver=driver, start_time=datetime.now())
+            await DriverBreak.create(driver=driver, start_time=_now())
             await status_msg.edit_text(
                 f"💬 _{transcript}_\n\n☕ *Pause gestartet* — viel Erholung!",
                 parse_mode="Markdown",
             )
         else:
-            active_break.end_time = datetime.now()
+            active_break.end_time = _now()
             await active_break.save()
             duration = int(
                 (active_break.end_time - active_break.start_time).total_seconds() / 60

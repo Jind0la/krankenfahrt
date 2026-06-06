@@ -26,8 +26,9 @@ Thumbs.db
 data/
 *.db
 
-# Docker
-docker/
+# Docker (allow entrypoint scripts for multi-stage builds)
+docker/Dockerfile
+docker/Dockerfile.osrm
 
 # Git
 .git/

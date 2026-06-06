@@ -274,7 +274,8 @@ class TestOrtoolsSolver:
 
     def test_return_empty_on_infeasible(self):
         """If time windows prevent any assignment, should return empty routes."""
-        # Create stops with impossible time windows (all past midnight)
+        # Use the standard builder but with very few vehicles
+        # Create stops with time windows outside vehicle hours
         stops = [
             RouteStop(
                 trip_id=1,
@@ -303,11 +304,12 @@ class TestOrtoolsSolver:
                 work_end=datetime(2024, 6, 15, 16, 0),
             )
         ]
+        # Distance matrix: 1 depot + 2 stops = 3 nodes
+        # depot→stop1, depot→stop2, stop1→stop2
         matrix = [
-            [0.0, 0.0, 1.0, 1.5],
-            [0.0, 0.0, 1.0, 1.5],
-            [1.0, 1.0, 0.0, 2.0],
-            [1.5, 1.5, 2.0, 0.0],
+            [0.0, 1.0, 1.5],   # depot
+            [1.0, 0.0, 2.0],   # stop 1 (pickup)
+            [1.5, 2.0, 0.0],   # stop 2 (delivery)
         ]
         problem = RouteInput(
             stops=stops,

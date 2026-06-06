@@ -90,52 +90,44 @@ class TokenBucket:
         bool
             True if a token was acquired, False on timeout.
         """
-        wait_start: float | None = None
+        deadline = time.monotonic() + timeout
 
+        # Quick path: try to acquire without waiting
         async with self._lock:
             self._refill()
-
             if self._tokens >= 1.0:
                 self._tokens -= 1.0
                 self.total_acquired += 1
                 return True
 
-            # Not enough tokens — calculate how long until one is available
-            needed = 1.0 - self._tokens
-            wait_s = needed / self.rate
-            wait_start = time.monotonic()
+        # Slow path: loop with timed waits
+        while True:
+            async with self._lock:
+                self._refill()
+                if self._tokens >= 1.0:
+                    self._tokens -= 1.0
+                    self.total_acquired += 1
+                    return True
 
-        # Wait outside the lock so other waiters can be processed
-        try:
-            await asyncio.sleep(wait_s)
-        except asyncio.CancelledError:
-            logger.debug("rate_limiter_wait_cancelled", name=self.name)
-            raise
+                # Calculate how long until a token is available
+                needed = 1.0 - self._tokens
+                wait_s = needed / self.rate
 
-        # Retry acquisition after waiting
-        async with self._lock:
-            self._refill()
-            if self._tokens >= 1.0:
-                self._tokens -= 1.0
-                self.total_acquired += 1
-                actual_wait = time.monotonic() - (wait_start or time.monotonic())
-                self.total_wait_s += actual_wait
-                self.total_deferred += 1
-                logger.debug(
-                    "rate_limiter_deferred_acquired",
+            # Check if we'd exceed the total timeout
+            now = time.monotonic()
+            remaining = deadline - now
+            if wait_s >= remaining:
+                logger.warning(
+                    "rate_limiter_timeout",
                     name=self.name,
-                    wait_s=round(actual_wait, 3),
+                    timeout_s=timeout,
+                    tokens_available=round(self._tokens, 3),
                 )
-                return True
+                return False
 
-            # Still not enough — timeout
-            logger.warning(
-                "rate_limiter_timeout",
-                name=self.name,
-                timeout_s=timeout,
-                tokens_available=round(self._tokens, 3),
-            )
-            return False
+            # Wait outside the lock so other waiters can process
+            self.total_deferred += 1
+            await asyncio.sleep(wait_s)
 
     async def try_acquire(self) -> bool:
         """Acquire a token if one is immediately available (non-blocking).

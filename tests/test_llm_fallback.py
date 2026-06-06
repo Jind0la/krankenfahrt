@@ -16,12 +16,6 @@ from krankenfahrt.resilience.llm_fallback import (
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
-@pytest.fixture(autouse=True)
-def setup_env(monkeypatch):
-    """Ensure required env vars are set for all tests."""
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
-
 
 @pytest.fixture
 def mock_openai_ok(respx_mock):
@@ -120,10 +114,23 @@ class TestProviderConfig:
             _get_provider_config("nonexistent")
 
     def test_missing_api_key_raises(self, monkeypatch):
-        """Missing API key raises ValueError."""
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        """Missing API key raises ValueError when checking unknown provider."""
+        # This test verifies that a truly unknown provider with no key raises
+        # We use a provider not in _PROVIDER_CONFIG
+        monkeypatch.setattr(
+            "krankenfahrt.resilience.llm_fallback._PROVIDER_CONFIG",
+            {
+                **_PROVIDER_CONFIG,
+                "custom": {
+                    "api_key_attr": "CUSTOM_API_KEY",
+                    "base_url_attr": "OPENAI_BASE_URL",
+                    "default_model": "custom-model",
+                },
+            },
+        )
+        monkeypatch.delenv("CUSTOM_API_KEY", raising=False)
         with pytest.raises(ValueError, match="API key not configured"):
-            _get_provider_config("openai")
+            _get_provider_config("custom")
 
 
 # ── Primary-only success ───────────────────────────────────────────────────

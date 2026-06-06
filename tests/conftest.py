@@ -16,6 +16,18 @@ import pytest
 from tortoise import Tortoise
 
 
+# ── Pytest configuration hook (runs before test collection) ─────────────────
+
+def pytest_configure(config) -> None:
+    """Set required environment variables before test collection."""
+    os.environ.setdefault("PATIENT_BOT_TOKEN", "test_patient_token")
+    os.environ.setdefault("DRIVER_BOT_TOKEN", "test_driver_token")
+    os.environ.setdefault("CHEF_BOT_TOKEN", "test_chef_token")
+    os.environ.setdefault("DEEPSEEK_API_KEY", "test-deepseek-key")
+    os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
+    os.environ.setdefault("ADMIN_TELEGRAM_IDS", "")
+
+
 # ── SQLite time adapter ────────────────────────────────────────────────────
 
 def _adapt_time(t: time) -> str:
@@ -33,18 +45,6 @@ def _convert_time(raw: bytes) -> time:
 
 sqlite3.register_adapter(time, _adapt_time)
 sqlite3.register_converter("time", _convert_time)
-
-
-# ── Environment setup (before any imports of krankenfahrt modules) ──────────
-
-@pytest.fixture(autouse=True)
-def setup_env() -> None:
-    """Ensure required env vars are set for all imports."""
-    os.environ.setdefault("PATIENT_BOT_TOKEN", "test_patient_token")
-    os.environ.setdefault("DRIVER_BOT_TOKEN", "test_driver_token")
-    os.environ.setdefault("CHEF_BOT_TOKEN", "test_chef_token")
-    os.environ.setdefault("DEEPSEEK_API_KEY", "test_deepseek_key")
-    os.environ.setdefault("ADMIN_TELEGRAM_IDS", "")
 
 
 # ── In-memory database fixture ─────────────────────────────────────────────
@@ -65,18 +65,18 @@ async def init_db() -> AsyncGenerator[None, None]:
     await Tortoise.close_connections()
 
 
-# ── Test data helpers ──────────────────────────────────────────────────────
+# ── Test data factories ────────────────────────────────────────────────────
 
 @pytest.fixture
-async def test_patient() -> Callable[..., "Patient"]:
-    """Factory to create a Patient record with sensible defaults."""
+async def test_patient(init_db) -> Callable[..., "Patient"]:
+    """Factory fixture to create a Patient record with sensible defaults."""
     from krankenfahrt.models.schema import Patient
 
     async def _create(**kwargs) -> Patient:
         defaults = {
             "telegram_id": 111111,
             "name": "Test Patient",
-            "phone": "+491234567890",
+            "phone": "+491****7890",
             "default_pickup_addr": "Teststraße 1, 12345 Berlin",
             "default_dest_addr": "Charité, Berlin",
             "vehicle_type": "Sitz",
@@ -88,8 +88,8 @@ async def test_patient() -> Callable[..., "Patient"]:
 
 
 @pytest.fixture
-async def test_vehicle() -> Callable[..., "Vehicle"]:
-    """Factory to create a Vehicle record with sensible defaults."""
+async def test_vehicle(init_db) -> Callable[..., "Vehicle"]:
+    """Factory fixture to create a Vehicle record with sensible defaults."""
     from krankenfahrt.models.schema import Vehicle
 
     async def _create(**kwargs) -> Vehicle:
@@ -105,15 +105,15 @@ async def test_vehicle() -> Callable[..., "Vehicle"]:
 
 
 @pytest.fixture
-async def test_driver() -> Callable[..., "Driver"]:
-    """Factory to create a Driver record with sensible defaults."""
+async def test_driver(init_db) -> Callable[..., "Driver"]:
+    """Factory fixture to create a Driver record with sensible defaults."""
     from krankenfahrt.models.schema import Driver
 
     async def _create(**kwargs) -> Driver:
         defaults = {
             "telegram_id": 222222,
             "name": "Test Driver",
-            "phone": "+491111111111",
+            "phone": "+491****1111",
             "p_schein": False,
             "work_hours_start": time(7, 0),
             "work_hours_end": time(18, 0),
@@ -127,8 +127,8 @@ async def test_driver() -> Callable[..., "Driver"]:
 
 
 @pytest.fixture
-async def test_trip() -> Callable[..., "Trip"]:
-    """Factory to create a Trip record with sensible defaults."""
+async def test_trip(init_db) -> Callable[..., "Trip"]:
+    """Factory fixture to create a Trip record with sensible defaults."""
     from krankenfahrt.models.schema import Trip
 
     async def _create(**kwargs) -> Trip:
@@ -148,14 +148,13 @@ async def test_trip() -> Callable[..., "Trip"]:
 
 @pytest.fixture
 async def scenario(
-    test_patient, test_vehicle, test_driver, test_trip, init_db,
+    test_patient, test_vehicle, test_driver, test_trip,
 ) -> dict:
     """Set up a complete Patient + Driver + Vehicle + Trip scenario.
 
-    Returns a dict with all records for assertions.
+    Returns a dict with all records ready for assertions.
     The trip starts in "geplant" status.
     """
-    _ = init_db  # Use the fixture to ensure DB is initialized
     patient = await test_patient()
     vehicle = await test_vehicle()
     driver = await test_driver(vehicle=vehicle)

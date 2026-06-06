@@ -185,9 +185,20 @@ class TripStateMachine:
             send_event=True,  # Pass event data to callbacks
             queued=True,      # Process transitions in FIFO order
             auto_transitions=False,  # No automatic to_<state> methods
+            after_state_change="_on_after_state_change",
         )
 
     # ── logging helpers ──────────────────────────────────────────────
+
+    def _on_after_state_change(self, event: Any) -> None:
+        """Called automatically by transitions after every state change.
+
+        Updates the wrapped trip model's status in memory so that
+        ``trip.status`` always reflects the current machine state.
+        The caller is responsible for calling ``await trip.save()``
+        to persist to the database.
+        """
+        self.trip.status = self.state
 
     def _emit_event(
         self,
@@ -410,6 +421,9 @@ class TripStateMachine:
         )
         # Use machine.set_state to bypass transitions framework
         self.machine.set_state(return_state)
+        # Manually sync trip status since after_state_change won't fire
+        # for programmatic set_state calls
+        self.trip.status = return_state
         self._pre_problem_state = None
 
     # ── derived properties ───────────────────────────────────────────
