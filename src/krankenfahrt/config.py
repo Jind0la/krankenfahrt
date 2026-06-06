@@ -21,12 +21,52 @@ class Config:
         )
     )
 
-    # LLM (DeepSeek)
+    # LLM (Primary + Fallback)
+    LLM_PRIMARY: str = field(
+        default_factory=lambda: os.environ.get("LLM_PRIMARY", "deepseek")
+    )  # "openai" | "deepseek"
+    LLM_FALLBACK: str = field(
+        default_factory=lambda: os.environ.get("LLM_FALLBACK", "")
+    )  # e.g. "deepseek" when primary is "openai", or "" for no fallback
+    LLM_TIMEOUT: float = field(
+        default_factory=lambda: float(os.environ.get("LLM_TIMEOUT", "30.0"))
+    )  # Total timeout across all fallback attempts (seconds)
+    LLM_MAX_RETRIES: int = field(
+        default_factory=lambda: int(os.environ.get("LLM_MAX_RETRIES", "2"))
+    )  # Retries per provider before falling back
+
+    # OpenAI (primary)
+    OPENAI_API_KEY: str = field(
+        default_factory=lambda: os.environ.get("OPENAI_API_KEY", "")
+    )
+    OPENAI_BASE_URL: str = field(
+        default_factory=lambda: os.environ.get(
+            "OPENAI_BASE_URL", "https://api.openai.com/v1"
+        )
+    )
+
+    # DeepSeek (default primary / fallback)
     DEEPSEEK_API_KEY: str = field(default_factory=lambda: os.environ["DEEPSEEK_API_KEY"])
     DEEPSEEK_BASE_URL: str = field(
         default_factory=lambda: os.environ.get(
             "DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"
         )
+    )
+
+    # Database retry
+    DB_RETRY_MAX_ATTEMPTS: int = field(
+        default_factory=lambda: int(os.environ.get("DB_RETRY_MAX_ATTEMPTS", "3"))
+    )
+    DB_RETRY_BACKOFF_BASE: float = field(
+        default_factory=lambda: float(os.environ.get("DB_RETRY_BACKOFF_BASE", "2.0"))
+    )
+
+    # Rate limiting (token bucket for outbound LLM calls)
+    RATE_LIMIT_TOKENS_PER_SEC: float = field(
+        default_factory=lambda: float(os.environ.get("RATE_LIMIT_TOKENS_PER_SEC", "5.0"))
+    )
+    RATE_LIMIT_BURST: int = field(
+        default_factory=lambda: int(os.environ.get("RATE_LIMIT_BURST", "10"))
     )
 
     # Voice (Whisper)
@@ -103,6 +143,14 @@ class Config:
     )
     HEALTH_PORT: int = field(
         default_factory=lambda: int(os.environ.get("HEALTH_PORT", "8080"))
+    )
+
+    # Escalation Management
+    ESCALATION_TIMEOUT_MINUTES: int = field(
+        default_factory=lambda: int(os.environ.get("ESCALATION_TIMEOUT_MINUTES", "30"))
+    )  # Auto-escalate if no status update in this many minutes
+    ESCALATION_ENABLED: bool = field(
+        default_factory=lambda: os.environ.get("ESCALATION_ENABLED", "1") == "1"
     )
 
     # Prometheus metrics server

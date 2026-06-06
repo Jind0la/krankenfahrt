@@ -104,6 +104,35 @@ llm_request_duration_seconds = Histogram(
     buckets=(0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0),
 )
 
+# ── Resilience metrics ────────────────────────────────────
+llm_fallback_total = Counter(
+    "krankenfahrt_llm_fallback_total",
+    "Number of times LLM fell back to secondary provider",
+    ["primary_provider", "fallback_provider"],
+)
+
+llm_retry_total = Counter(
+    "krankenfahrt_llm_retry_total",
+    "Number of LLM call retries",
+    ["provider"],
+)
+
+db_retry_total = Counter(
+    "krankenfahrt_db_retry_total",
+    "Number of database write retries",
+    ["operation"],
+)
+
+rate_limiter_deferred_total = Counter(
+    "krankenfahrt_rate_limiter_deferred_total",
+    "Number of requests deferred by rate limiter",
+)
+
+rate_limiter_timeout_total = Counter(
+    "krankenfahrt_rate_limiter_timeout_total",
+    "Number of requests that timed out waiting for rate limit token",
+)
+
 dispatch_attempts_total = Counter(
     "krankenfahrt_dispatch_attempts_total",
     "Total number of dispatch attempts",
@@ -184,7 +213,8 @@ class MetricsServer:
         data = generate_latest(REGISTRY)
         return web.Response(
             body=data,
-            content_type="text/plain; charset=utf-8",
+            content_type="text/plain",
+            charset="utf-8",
         )
 
     async def _handle_health(self, request: web.Request) -> web.Response:

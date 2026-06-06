@@ -72,6 +72,13 @@ async def main() -> None:
     )
     await health_server.start()
 
+    # Start the Prometheus metrics server
+    metrics_server = MetricsServer(
+        host=config.HEALTH_HOST,
+        port=config.METRICS_PORT,
+    )
+    await metrics_server.start()
+
     # Build bots
     patient_bot = await build_patient_bot()
     driver_bot = await build_driver_bot()
@@ -101,6 +108,7 @@ async def main() -> None:
         await driver_bot.shutdown()
         await chef_bot.shutdown()
         await health_server.stop()
+        await metrics_server.stop()
         await Tortoise.close_connections()
 
 
