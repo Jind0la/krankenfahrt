@@ -78,7 +78,7 @@ async def send_morning_push(app: Application) -> int:
     notified = 0
     for did, data in driver_trips.items():
         driver = driver_map.get(did)
-        if driver is None or driver.telegram_id is None:
+        if driver is None or driver.telegram_id is None or driver.telegram_id <= 0:
             continue
 
         trips = data["trips"]
@@ -143,7 +143,7 @@ async def send_morning_push(app: Application) -> int:
 
 async def _seconds_until_next(hour: int, minute: int) -> float:
     """Calculate seconds until the next occurrence of HH:MM local time."""
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if target <= now:
         target += timedelta(days=1)

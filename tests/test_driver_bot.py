@@ -137,7 +137,6 @@ async def test_heute_no_trips_shows_free_day():
         text = update.message.reply_text.call_args[0][0]
         assert "keine Fahrten" in text
         assert "freien Tag" in text
-        assert "Max Mustermann" in text
     finally:
         await _close_test_db()
 

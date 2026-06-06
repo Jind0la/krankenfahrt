@@ -320,15 +320,13 @@ async def test_e2e_flow_writes_audit_events(
     trip.vehicle = scenario["vehicle"]
     await trip.save()
 
-    # Create an event logger that persists TripEvent records to the DB
-    async def persist_event(evt: StateChangeEvent) -> None:
-        await TripEvent.create(
-            trip=trip,
-            event_type="status_change",
-            message=f"{evt.from_state} → {evt.to_state} via {evt.trigger}",
-        )
+    # Create an event logger that records events (sync, since transitions is sync)
+    logged_events: list[StateChangeEvent] = []
 
-    sm = TripStateMachine(trip, event_logger=persist_event)
+    def record_event(evt: StateChangeEvent) -> None:
+        logged_events.append(evt)
+
+    sm = TripStateMachine(trip, event_logger=record_event)
 
     # Run through the entire flow
     sm.fahrer_zuweisen()

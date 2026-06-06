@@ -713,8 +713,8 @@ async def _handle_vehicle_update(
                 parse_mode="Markdown",
             )
             return
-        new_type = value_args[0].capitalize()
-        if new_type not in ("Sitz", "Liege", "Rad", "Ktw"):
+        new_type = value_args[0].upper()
+        if new_type not in ("SITZ", "LIEGE", "RAD", "KTW"):
             await update.message.reply_text(
                 f"❌ Ungültiger Typ: `{new_type}`. Erlaubt: Sitz, Liege, Rad, KTW",
                 parse_mode="Markdown",
