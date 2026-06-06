@@ -21,21 +21,35 @@ from pathlib import Path
 from typing import Sequence
 
 import structlog
-from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import cm, mm
-from reportlab.platypus import (
-    Frame,
-    Image,
-    PageTemplate,
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-)
+
+# ReportLab is optional — only needed for PDF invoice generation.
+# CSV export works without it.
+try:
+    from reportlab.lib import colors as _rl_colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import cm, mm
+    from reportlab.platypus import (
+        Frame,
+        Image,
+        PageTemplate,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+    _HAS_REPORTLAB = True
+except ImportError:
+    _HAS_REPORTLAB = False
+    # Dummy values so constants don't break module import
+    A4 = (595.27, 841.89)
+    cm = 28.3465
+    mm = 2.83465
+    TA_CENTER = 1
+    TA_LEFT = 0
+    TA_RIGHT = 2
 
 from krankenfahrt.config import config
 
@@ -315,8 +329,8 @@ def _build_line_item_table(data: Muster4Data) -> Table:
         TableStyle(
             [
                 # Header row
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8E8E8")),
-                ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.black),
+                ("BACKGROUND", (0, 0), (-1, 0), _rl_colors.HexColor("#E8E8E8")),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.5, _rl_colors.black),
                 # Body
                 ("FONTSIZE", (0, 0), (-1, -1), 7),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -325,12 +339,12 @@ def _build_line_item_table(data: Muster4Data) -> Table:
                 ("LEFTPADDING", (0, 0), (-1, -1), 2),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 2),
                 # Inner grid
-                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.Color(0.7, 0.7, 0.7)),
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, _rl_colors.Color(0.7, 0.7, 0.7)),
+                ("BOX", (0, 0), (-1, -1), 0.5, _rl_colors.black),
                 # Align numeric columns right
                 ("ALIGN", (3, 0), (5, -1), "RIGHT"),
                 # Total row background
-                ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#F5F5F5")),
+                ("BACKGROUND", (0, -1), (-1, -1), _rl_colors.HexColor("#F5F5F5")),
             ]
         )
     )
@@ -371,7 +385,7 @@ def _build_summary_block(data: Muster4Data) -> Table:
             [
                 ("ALIGN", (0, 0), (0, -1), "RIGHT"),
                 ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-                ("LINEABOVE", (0, 2), (-1, 2), 0.5, colors.black),
+                ("LINEABOVE", (0, 2), (-1, 2), 0.5, _rl_colors.black),
                 ("TOPPADDING", (0, 2), (-1, 2), 4),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ]
@@ -447,7 +461,7 @@ def _draw_static_elements(canvas, doc):
     """Draw static elements on each page: footer line, page number."""
     canvas.saveState()
     # Footer line
-    canvas.setStrokeColor(colors.Color(0.7, 0.7, 0.7))
+    canvas.setStrokeColor(_rl_colors.Color(0.7, 0.7, 0.7))
     canvas.setLineWidth(0.5)
     canvas.line(
         LEFT_MARGIN,
@@ -484,6 +498,11 @@ def generate_muster4_invoice(
     Returns:
         Path to the generated PDF file.
     """
+    if not _HAS_REPORTLAB:
+        raise ImportError(
+            "ReportLab is required for PDF invoice generation. "
+            "Install with: pip install reportlab"
+        )
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{data.rechnungsnummer}.pdf"
@@ -557,8 +576,8 @@ def generate_muster4_invoice(
     patient_table.setStyle(
         TableStyle(
             [
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.Color(0.7, 0.7, 0.7)),
-                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.Color(0.85, 0.85, 0.85)),
+                ("BOX", (0, 0), (-1, -1), 0.5, _rl_colors.Color(0.7, 0.7, 0.7)),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, _rl_colors.Color(0.85, 0.85, 0.85)),
                 ("TOPPADDING", (0, 0), (-1, -1), 4),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
                 ("LEFTPADDING", (0, 0), (-1, -1), 6),
@@ -611,8 +630,8 @@ def generate_muster4_invoice(
     sig_table.setStyle(
         TableStyle(
             [
-                ("LINEBELOW", (0, 0), (0, 0), 0.5, colors.black),
-                ("LINEBELOW", (1, 0), (1, 0), 0.5, colors.black),
+                ("LINEBELOW", (0, 0), (0, 0), 0.5, _rl_colors.black),
+                ("LINEBELOW", (1, 0), (1, 0), 0.5, _rl_colors.black),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("TOPPADDING", (0, 0), (-1, -1), 15),
             ]

@@ -550,7 +550,7 @@ async def test_export_pdf_no_trips_found(db):
     await cmd_export(update, ctx)
     # First call: progress message
     first_call = update.message.reply_text.call_args_list[0][0][0]
-    assert "erstellt" in first_call.lower() or "creating" in first_call.lower()
+    assert "erstelle" in first_call.lower() or "creating" in first_call.lower()
 
     # Second call: no trips warning
     second_call = update.message.reply_text.call_args_list[1][0][0]
@@ -598,7 +598,7 @@ async def test_export_pdf_with_trips(db, tmp_path):
 
     # First call: progress
     progress = update.message.reply_text.call_args_list[0][0][0]
-    assert "erstellt" in progress.lower() or "creating" in progress.lower()
+    assert "erstelle" in progress.lower() or "creating" in progress.lower()
 
     # Second call: reply_document with PDF
     assert update.message.reply_document.called

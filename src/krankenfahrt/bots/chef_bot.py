@@ -18,7 +18,7 @@ import structlog
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from krankenfahrt.config import config
+from krankenfahrt.config import PROJECT_ROOT, config
 from krankenfahrt.models.schema import Driver, Patient, Vehicle
 from krankenfahrt.resilience.db_retry import db_retry
 from krankenfahrt.services.billing import (
@@ -123,27 +123,81 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 # =============================================================================
+# =============================================================================
 # /export
 # =============================================================================
 
+EXPORT_HELP = (
+    "\U0001f4ca *Abrechnungs-Export*\n\n"
+    "*CSV-Export:*\n"
+    "`/export csv [von] [bis]`\n"
+    "  Ohne Datum: Alle Fahrten exportieren.\n"
+    "  Mit einem Datum: ab diesem Datum.\n"
+    "  Mit zwei Daten: Zeitraum von\u2013bis.\n\n"
+    "*PDF-Rechnung (Muster-4):*\n"
+    "`/export pdf <Patient-ID> [von] [bis]`\n"
+    "  Erzeugt eine Muster-4 PDF-Rechnung f\u00fcr den Patienten.\n"
+    "  Optionale Datumsangaben grenzen den Zeitraum ein.\n\n"
+    "*Beispiele:*\n"
+    "`/export csv 01.06.2026 30.06.2026`\n"
+    "`/export pdf 1 01.06.2026 30.06.2026`"
+)
 
+
+@_require_admin
 async def cmd_export(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """CSV export of billing data.
+    """Router for /export subcommands.
 
-    Usage: /export [from] [to]
-    Without args: export all trips.
-    With one date: from that date onward.
-    With two dates: range from–to.
+    Usage:
+      /export csv [from] [to]   \u2014 CSV export
+      /export pdf <patient_id> [from] [to]  \u2014 PDF Muster-4 invoice
+      /export                    \u2014 show help
     """
     args = context.args
+
+    if not args:
+        await update.message.reply_text(EXPORT_HELP, parse_mode="Markdown")
+        return
+
+    sub = args[0].lower()
+
+    if sub == "csv":
+        await _handle_export_csv(update, context)
+    elif sub == "pdf":
+        await _handle_export_pdf(update, context)
+    else:
+        # Backward compatibility: if first arg looks like a date, treat as CSV
+        if _parse_date_arg(args[0]) is not None:
+            await _handle_export_csv(update, context)
+        else:
+            await update.message.reply_text(
+                f"\u2753 Unbekannter Unterbefehl: `{sub}`\n\n{EXPORT_HELP}",
+                parse_mode="Markdown",
+            )
+
+
+async def _handle_export_csv(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """CSV export of billing data.
+
+    Usage: /export csv [from] [to]
+    Without args: export all trips.
+    With one date: from that date onward.
+    With two dates: range from\u2013to.
+    """
+    args = context.args
+    # Skip "csv" subcommand if present
+    if args and args[0].lower() == "csv":
+        args = args[1:]
     filters = ExportFilters()
 
     if len(args) >= 1:
         date_from = _parse_date_arg(args[0])
         if date_from is None:
             await update.message.reply_text(
-                "❌ Ungültiges Datum. Bitte im Format DD.MM.YYYY angeben, "
-                "z.B. `/export 01.06.2026`",
+                "\u274c Ung\u00fcltiges Datum. Bitte im Format DD.MM.YYYY angeben, "
+                "z.B. `/export csv 01.06.2026`",
                 parse_mode="Markdown",
             )
             return
@@ -153,17 +207,19 @@ async def cmd_export(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         date_to = _parse_date_arg(args[1])
         if date_to is None:
             await update.message.reply_text(
-                "❌ Ungültiges Enddatum. Bitte im Format DD.MM.YYYY angeben.",
+                "\u274c Ung\u00fcltiges Enddatum. Bitte im Format DD.MM.YYYY angeben.",
                 parse_mode="Markdown",
             )
             return
         filters.date_to = date_to
 
     await update.message.reply_text(
-        "⏳ Exportiere Abrechnungsdaten..."
+        "\u23f3 Exportiere Abrechnungsdaten..."
         + (
-            f"\nZeitraum: {filters.date_from.strftime('%d.%m.%Y')} – "
-            f"{filters.date_to.strftime('%d.%m.%Y')}"
+            "\nZeitraum: "
+            + filters.date_from.strftime("%d.%m.%Y")
+            + " \u2013 "
+            + filters.date_to.strftime("%d.%m.%Y")
             if filters.date_from
             else ""
         ),
@@ -172,22 +228,154 @@ async def cmd_export(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     try:
         filepath = await export_billing_csv(filters=filters)
         with open(filepath, "rb") as f:
+            caption_text = (
+                "\U0001f4ca Abrechnungs-Export\n"
+                "Alle Fahrten\n"
+                f"Datei: `{filepath.name}`"
+            )
+            if filters.date_from:
+                caption_text = (
+                    "\U0001f4ca Abrechnungs-Export\n"
+                    f"Zeitraum: {filters.date_from.strftime('%d.%m.%Y')} \u2013 "
+                    f"{filters.date_to.strftime('%d.%m.%Y')}\n"
+                    f"Datei: `{filepath.name}`"
+                )
             await update.message.reply_document(
                 document=f,
                 filename=filepath.name,
-                caption=(
-                    f"📊 Abrechnungs-Export\n"
-                    f"{'Zeitraum: ' + filters.date_from.strftime('%d.%m.%Y') + ' – ' + filters.date_to.strftime('%d.%m.%Y') if filters.date_from else 'Alle Fahrten'}\n"
-                    f"Datei: `{filepath.name}`"
-                ),
+                caption=caption_text,
                 parse_mode="Markdown",
             )
     except Exception as e:
-        logger.exception("Export failed")
-        await update.message.reply_text(f"❌ Export fehlgeschlagen: {e}")
+        logger.exception("CSV export failed")
+        await update.message.reply_text(f"\u274c Export fehlgeschlagen: {e}")
 
 
-# =============================================================================
+async def _handle_export_pdf(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Generate Muster-4 PDF invoice for a specific patient.
+
+    Usage: /export pdf <patient_id> [from] [to]
+    """
+    args = context.args
+    # Skip "pdf" subcommand
+    if args and args[0].lower() == "pdf":
+        args = args[1:]
+
+    if not args:
+        await update.message.reply_text(
+            "\u274c Bitte eine Patient-ID angeben.\n\n"
+            "Verwendung: `/export pdf <Patient-ID> [von] [bis]`\n\n"
+            "Beispiel: `/export pdf 1 01.06.2026 30.06.2026`",
+            parse_mode="Markdown",
+        )
+        return
+
+    patient_id = _parse_int_arg(args[0])
+    if patient_id is None:
+        await update.message.reply_text(
+            f"\u274c Ung\u00fcltige Patient-ID: `{args[0]}`. Bitte eine Zahl angeben.",
+            parse_mode="Markdown",
+        )
+        return
+
+    # Fetch patient
+    patient = await Patient.filter(id=patient_id).first()
+    if patient is None:
+        await update.message.reply_text(
+            f"\u274c Patient mit ID *{patient_id}* nicht gefunden.",
+            parse_mode="Markdown",
+        )
+        return
+
+    # Parse optional date filters
+    date_from = None
+    date_to = None
+    date_args = args[1:]
+
+    if len(date_args) >= 1:
+        date_from = _parse_date_arg(date_args[0])
+        if date_from is None:
+            await update.message.reply_text(
+                "\u274c Ung\u00fcltiges Von-Datum. Bitte im Format DD.MM.YYYY angeben.",
+                parse_mode="Markdown",
+            )
+            return
+
+    if len(date_args) >= 2:
+        date_to = _parse_date_arg(date_args[1])
+        if date_to is None:
+            await update.message.reply_text(
+                "\u274c Ung\u00fcltiges Bis-Datum. Bitte im Format DD.MM.YYYY angeben.",
+                parse_mode="Markdown",
+            )
+            return
+
+    await update.message.reply_text(
+        "\u23f3 Erstelle Muster-4 Rechnung..."
+        + (f"\nPatient: {patient.name}" if patient.name else ""),
+    )
+
+    try:
+        from krankenfahrt.models.schema import Trip as TripModel
+        from krankenfahrt.services.billing import generate_invoice_for_trips
+
+        # Query trips for this patient, filtered by date range if provided
+        query = (
+            TripModel.filter(patient_id=patient_id)
+            .prefetch_related("vehicle", "patient")
+        )
+
+        if date_from:
+            query = query.filter(scheduled_pickup__gte=date_from)
+        if date_to:
+            query = query.filter(scheduled_pickup__lte=date_to)
+
+        trips = await query
+
+        if not trips:
+            await update.message.reply_text(
+                "\u26a0\ufe0f Keine Fahrten f\u00fcr diesen Patienten im angegebenen Zeitraum gefunden.",
+            )
+            return
+
+        # Generate the invoice
+        output_dir = PROJECT_ROOT / "data" / "exports"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        pdf_path = await generate_invoice_for_trips(
+            trips=trips,
+            patient_name=patient.name,
+            patient_geburtsdatum="",
+            patient_strasse=patient.default_pickup_addr or "",
+            patient_ort="",
+            patient_versichertennummer=patient.insurance_number or "",
+            kk_name=patient.insurance_provider or "Krankenkasse",
+            kk_strasse="",
+            kk_ort="",
+            kk_ik_nummer="",
+            output_dir=output_dir,
+        )
+
+        with open(pdf_path, "rb") as f:
+            await update.message.reply_document(
+                document=f,
+                filename=pdf_path.name,
+                caption=(
+                    f"\U0001f4c4 Muster-4 Rechnung\n"
+                    f"Patient: {patient.name}\n"
+                    f"Fahrten: {len(trips)}\n"
+                    f"Datei: `{pdf_path.name}`"
+                ),
+                parse_mode="Markdown",
+            )
+
+    except Exception as e:
+        logger.exception("PDF export failed")
+        await update.message.reply_text(f"\u274c PDF-Export fehlgeschlagen: {e}")
+
+
 # /fahrer — Driver Management
 # =============================================================================
 
