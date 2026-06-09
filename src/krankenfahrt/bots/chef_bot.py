@@ -446,6 +446,9 @@ async def _handle_driver_add(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # Parse: last arg is phone, second-to-last (if numeric and 8+ digits) is telegram_id
     # Only attempt telegram_id extraction when we have 4+ args (name parts + phone + optional id)
+    # Strip markdown formatting characters (*, _, ~, `) that users may accidentally include
+    args = [a.strip("*_~`") for a in args]
+
     telegram_id = 0
     if len(args) >= 4 and args[-1].isdigit() and len(args[-1]) >= 8:
         telegram_id = int(args[-1])
