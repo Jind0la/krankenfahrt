@@ -16,6 +16,8 @@ NLU_SYSTEM_PROMPT = """Du bist ein Agent für Krankentransport-Buchungen.
 Extrahiere aus Patientennachrichten strukturierte Buchungsdaten.
 Antworte AUSSCHLIESSLICH mit JSON.
 
+HEUTE IST: {today_date}
+
 ERKENNTE AKTIONEN:
 - "book": Einmalige Fahrt buchen
 - "recurring": Wiederkehrende Fahrt anlegen
@@ -26,7 +28,7 @@ ERKENNTE AKTIONEN:
 
 FELDER (nur wenn relevant):
 - action: string (book/recurring/cancel/change/info/other)
-- pickup_date: YYYY-MM-DD (wenn "morgen", nimm morgen. Wenn "übermorgen", den Tag danach)
+- pickup_date: YYYY-MM-DD (berechne aus "morgen", "übermorgen", "nächsten Montag" etc. relativ zu HEUTE)
 - pickup_time: HH:MM (wenn "früh", nimm 07:30. "vormittags" = 09:00. "mittags" = 12:00)
 - return_time: HH:MM oder null
 - dest: Zieladresse oder Klinikname
@@ -37,16 +39,16 @@ FELDER (nur wenn relevant):
 
 BEISPIELE:
 "Morgen 8 Uhr zur Dialyse Klinikum Nord, Rückfahrt ca. 12:30"
-→ {"action":"book","pickup_date":"2026-06-07","pickup_time":"08:00","dest":"Klinikum Nord","return_time":"12:30","reason":"Dialyse","confidence":0.95}
+→ {{"action":"book","pickup_date":"MORGEN","pickup_time":"08:00","dest":"Klinikum Nord","return_time":"12:30","reason":"Dialyse","confidence":0.95}}
 
 "Jeden Montag und Mittwoch 9:00 zur Physio, bin ca 45 Minuten da"
-→ {"action":"recurring","pickup_time":"09:00","dest":"Physio","days":["Mo","Mi"],"duration_min":45,"confidence":0.90}
+→ {{"action":"recurring","pickup_time":"09:00","dest":"Physio","days":["Mo","Mi"],"duration_min":45,"confidence":0.90}}
 
 "Kann ich meine Fahrt für morgen verschieben?"
-→ {"action":"info","confidence":0.80}
+→ {{"action":"info","confidence":0.80}}
 
 "Heute war der Fahrer 20 Minuten zu spät"
-→ {"action":"other","confidence":0.95}"""
+→ {{"action":"other","confidence":0.95}}"""
 
 @dataclass
 class BookingIntent:
@@ -68,8 +70,13 @@ async def extract_booking_intent(message: str) -> BookingIntent:
     transient errors, falls back to secondary provider if configured,
     and rate-limits outbound API calls via token bucket.
     """
+    from datetime import date as _date
+    today = _date.today()
+    today_str = today.strftime("%Y-%m-%d")
+    prompt = NLU_SYSTEM_PROMPT.format(today_date=f"{today_str} ({today.strftime('%A')})")
+
     messages = [
-        {"role": "system", "content": NLU_SYSTEM_PROMPT},
+        {"role": "system", "content": prompt},
         {"role": "user", "content": message},
     ]
 

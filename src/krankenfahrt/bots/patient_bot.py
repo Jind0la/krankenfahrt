@@ -1020,6 +1020,58 @@ async def _ask_to_rephrase(update: Update) -> None:
     )
 
 
+async def _try_auto_dispatch(trip, update: Update) -> None:
+    """Try to auto-assign a driver to a newly created trip."""
+    from krankenfahrt.core.dispatch import GreedyDispatchEngine
+    from krankenfahrt.models.schema import Driver
+
+    drivers = await Driver.filter(active=True).all()
+    if not drivers:
+        logger.info("No active drivers for auto-dispatch of trip %d", trip.id)
+        return
+
+    engine = GreedyDispatchEngine()
+    assignment = await engine.find_best_driver(trip, drivers)
+
+    if assignment.driver is None:
+        logger.info("No suitable driver found for trip %d", trip.id)
+        return
+
+    # Assign driver
+    trip.driver = assignment.driver
+    trip.status = "zugewiesen"
+    await trip.save()
+
+    # Log the assignment
+    from krankenfahrt.models.schema import TripEvent
+    await TripEvent.create(
+        trip_id=trip.id,
+        event_type="assigned",
+        message=f"Auto-assigned to {assignment.driver.name} (score={assignment.score:.2f})",
+    )
+
+    # Notify driver
+    try:
+        await update.get_bot().send_message(
+            chat_id=assignment.driver.telegram_id,
+            text=(
+                f"📋 *Neue Fahrt zugewiesen!*\n\n"
+                f"👤 {trip.patient.name if await trip.patient else '?'}\n"
+                f"📍 {trip.pickup_addr} → {trip.dest_addr}\n"
+                f"🕐 {trip.scheduled_pickup.strftime('%d.%m.%Y %H:%M')}\n\n"
+                f"Nutze /heute für deine Fahrten."
+            ),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    except Exception:
+        logger.warning("Failed to notify driver %d", assignment.driver.telegram_id)
+
+    logger.info(
+        "Auto-dispatched trip %d to driver %s (score=%.2f)",
+        trip.id, assignment.driver.name, assignment.score,
+    )
+
+
 async def _handle_book_intent(
     update: Update, patient: Patient, intent
 ) -> None:
@@ -1131,6 +1183,12 @@ async def _handle_book_intent(
         confirm_msg,
         parse_mode=ParseMode.MARKDOWN,
     )
+
+    # Auto-dispatch: try to assign a driver immediately
+    try:
+        await _try_auto_dispatch(trip, update)
+    except Exception:
+        logger.warning("Auto-dispatch failed for trip %d", trip.id, exc_info=True)
 
 
 async def _handle_info_intent(update: Update, patient: Patient) -> None:
