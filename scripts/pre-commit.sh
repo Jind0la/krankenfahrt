@@ -11,13 +11,13 @@ set -e
 cd "$(git rev-parse --show-toplevel)"
 
 echo "🔒 KTF Pre-Commit: Contract Gate..."
-python -m pytest tests/contracts/ -q --no-header 2>&1 || {
+python3 -m pytest tests/contracts/ -q --no-header 2>&1 || {
     echo "❌ CONTRACT FAILED: Service module import broken. Fix before commit."
     exit 1
 }
 
 echo "🔒 KTF Pre-Commit: Unit Tests..."
-python -m pytest tests/unit/ -q --no-header 2>&1 || {
+python3 -m pytest tests/unit/ -q --no-header 2>&1 || {
     echo "❌ UNIT TESTS FAILED. Fix before commit."
     exit 1
 }
