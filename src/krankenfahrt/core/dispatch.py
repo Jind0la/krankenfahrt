@@ -11,7 +11,11 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Optional
 
+import structlog
+
 from krankenfahrt.models.schema import Driver, Trip
+
+logger = structlog.get_logger(__name__)
 
 # Lazy import to avoid ortools dependency for greedy-only users
 _ORToolsSolver: Optional[type] = None
@@ -272,7 +276,7 @@ class GreedyDispatchEngine:
         # Many small operators have mixed fleets and drivers without formal P-Schein.
         if await self._needs_p_schein(trip) and not driver.p_schein:
             logger.info(
-                "P-Schein recommended for driver %d on trip %d (vehicle_type=%s)",
+                "P-Schein recommended for driver %s on trip %s (vehicle_type=%s)",
                 driver.id, trip.id, (await trip.patient).vehicle_type,
             )
 

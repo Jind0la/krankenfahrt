@@ -746,14 +746,62 @@ async def _get_active_trip_for_driver(driver: Driver) -> Trip | None:
     return trips[0] if trips else None
 
 
+# ── Natural language handler (text) ────────────────────────────────────
+
+async def handle_natural_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle natural language text messages: classify intent via NLU, route."""
+    text = update.message.text.strip()
+    if not text:
+        return
+
+    from krankenfahrt.services.nlu import classify_driver
+
+    intent = await classify_driver(text)
+    logger.info("Driver NLU: %s → intent=%s (%.2f)", text[:60], intent.intent, intent.confidence)
+
+    if intent.intent == "heute":
+        await cmd_heute(update, context)
+    elif intent.intent == "pause":
+        await cmd_pause(update, context)
+    elif intent.intent == "status":
+        # Route to voice handler's status logic (reuse the pipeline)
+        await update.message.reply_text(
+            "📋 Für Status-Updates nutze bitte die Buttons unter deiner aktiven Fahrt, "
+            "oder schick eine Sprachnachricht („Bin angekommen\", „Patient an Bord\" etc.)."
+        )
+    elif intent.intent == "problem":
+        await update.message.reply_text(
+            "⚠️ *Problem melden* — bitte beschreibe das Problem kurz.\n"
+            "Ich informiere dann den Disponenten.",
+            parse_mode="Markdown",
+        )
+    elif intent.intent == "info":
+        await update.message.reply_text(
+            "🚗 *Fahrer-Bot*\n\n"
+            "Sprich einfach mit mir!\n"
+            "\"Was hab ich heute?\" → Tagesübersicht\n"
+            "\"Ich mach Pause\" → Pause starten\n"
+            "\"Bin zurück\" → wieder bereit\n\n"
+            "Oder: /heute • /pause • Sprachnachricht"
+        )
+    else:
+        await update.message.reply_text(
+            "❓ Sag einfach was du brauchst — \"Was hab ich heute?\", "
+            "\"Ich mach Pause\", oder sprich eine Sprachnachricht."
+        )
+
+
 # ── Handler registration ──────────────────────────────────────────────
 
 def register_handlers(app: Application) -> None:
     """Register all driver-bot command and callback handlers."""
+    # Natural language text (catches non-command text)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_natural_message))
+    # Commands
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("heute", cmd_heute))
     app.add_handler(CommandHandler("pause", cmd_pause))
     app.add_handler(CallbackQueryHandler(handle_trip_callback, pattern=f"^{CALLBACK_PREFIX}:"))
     # Voice message handler — full pipeline: transcribe → intent → status update
     app.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
-    logger.info("Driver-Bot handlers registered: start, heute, pause, trip_callback, voice")
+    logger.info("Driver-Bot handlers registered: NLU + start, heute, pause, trip_callback, voice")

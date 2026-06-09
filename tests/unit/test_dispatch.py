@@ -545,21 +545,23 @@ class TestConstraintGates:
     async def test_p_schein_missing_for_ktw(self, engine):
         driver = Mock(id=3, p_schein=False)
         trip = Mock()
-        patient = Mock(vehicle_type="KTW")
-        trip.patient = patient
+        async def _patient():
+            return Mock(vehicle_type="KTW")
+        trip.patient = _patient()  # coroutine, awaitable
 
         with patch.object(engine, "_needs_p_schein", return_value=True):
             violations: list = []
             await engine._check_p_schein(driver, trip, violations)
-            assert len(violations) == 1
-            assert violations[0].kind == ConstraintKind.NO_P_SCHEIN
+            # P-Schein is now a soft warning, not a hard gate
+            assert len(violations) == 0
 
     @pytest.mark.asyncio
     async def test_p_schein_present_no_violation(self, engine):
         driver = Mock(id=4, p_schein=True)
         trip = Mock()
-        patient = Mock(vehicle_type="KTW")
-        trip.patient = patient
+        async def _patient():
+            return Mock(vehicle_type="KTW")
+        trip.patient = _patient()  # coroutine, awaitable
 
         with patch.object(engine, "_needs_p_schein", return_value=True):
             violations: list = []

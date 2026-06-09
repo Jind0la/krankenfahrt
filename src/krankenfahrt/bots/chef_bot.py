@@ -1333,14 +1333,76 @@ async def cmd_assign_callback(
 
 
 # =============================================================================
+# Natural Language Handler (Chef)
+# =============================================================================
+
+
+async def handle_natural_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle natural language messages: classify intent via NLU, route to handler."""
+    text = update.message.text.strip()
+    if not text:
+        return
+
+    from krankenfahrt.services.nlu import classify_chef
+
+    intent = await classify_chef(text)
+    logger.info("Chef NLU: %s → intent=%s (%.2f)", text[:60], intent.intent, intent.confidence)
+
+    if intent.intent == "dashboard":
+        await cmd_dashboard(update, context)
+    elif intent.intent == "driver_list":
+        await _handle_driver_list(update, context)
+    elif intent.intent == "export":
+        await cmd_export(update, context)
+    elif intent.intent == "escalate":
+        await _handle_escalation_list(update, context)
+    elif intent.intent == "driver_add":
+        # Extract name/phone from text using LLM or fall back to /fahrer add hint
+        await update.message.reply_text(
+            "📋 *Fahrer anlegen* — nutze dafür bitte:\n"
+            "`/fahrer add <Vorname> <Nachname> <Telefon> [Telegram-ID]`\n\n"
+            "Beispiel: `/fahrer add Max Mustermann 017612345678`",
+            parse_mode="Markdown",
+        )
+    elif intent.intent == "assign_trip":
+        # Guide user to dashboard for assignment
+        await update.message.reply_text(
+            "🔀 *Fahrt zuweisen* — schau dir das Dashboard an:\n"
+            "`/dashboard` zeigt alle Fahrten mit Zuweisen-Buttons.",
+            parse_mode="Markdown",
+        )
+    elif intent.intent == "info":
+        await update.message.reply_text(
+            "👔 *Krankenfahrt Chef-Bot*\n\n"
+            "Sprich einfach mit mir! Hier sind die wichtigsten Funktionen:\n\n"
+            "📊 *Fahrten anzeigen* — sag \"Dashboard\" oder \"was steht heute an\"\n"
+            "👤 *Fahrer verwalten* — sag \"Fahrerliste\" oder \"neuen Fahrer anlegen\"\n"
+            "📎 *Export* — sag \"Export\" oder \"Abrechnung\"\n"
+            "⚠️ *Probleme* — sag \"Eskalationen\" oder \"was ist offen\"\n\n"
+            "Oder nutze die klassischen /commands:\n"
+            "/dashboard • /fahrer • /fahrzeug • /export • /eskalationen",
+            parse_mode="Markdown",
+        )
+    else:
+        await update.message.reply_text(
+            "❓ Das habe ich nicht verstanden. Sag einfach was du tun möchtest — "
+            "z.B. \"Dashboard\", \"Fahrerliste\", \"Export\" — oder nutze /start für Hilfe."
+        )
+
+
+# =============================================================================
 # Handler Registration
 # =============================================================================
 
 
 def register_handlers(app: Application) -> None:
     """Register all Chef-Bot command handlers."""
-    from telegram.ext import CallbackQueryHandler
+    from telegram.ext import CallbackQueryHandler, MessageHandler, filters
 
+    # Natural language first (catches non-command text)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_natural_message))
+
+    # Command handlers
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("dashboard", cmd_dashboard))
     app.add_handler(CommandHandler("export", cmd_export))
@@ -1349,5 +1411,5 @@ def register_handlers(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(cmd_assign_callback, pattern="^assign_"))
 
     logger.info(
-        "Chef-Bot handlers registered: start, dashboard, export, fahrer, fahrzeug"
+        "Chef-Bot handlers registered: NLU + start, dashboard, export, fahrer, fahrzeug"
     )
