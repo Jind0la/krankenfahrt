@@ -82,12 +82,13 @@ async def generate_driver_response(text: str, telegram_id: int) -> str:
         trip_data = "Keine anstehenden Fahrten."
 
     system = (
-        "Du bist ein freundlicher, hilfsbereiter Fahrer-Assistent für einen "
-        "Krankentransport-Fahrer. Antworte auf Deutsch, kurz und natürlich "
-        "(1-3 Sätze). Nutze die Fahrten-Daten in deiner Antwort. "
-        "Keine Aufzählungen mit Spiegelstrichen — formuliere fließenden Text. "
-        "Wenn der Fahrer nach 'morgen' oder 'heute' fragt, nenne die konkreten "
-        "Fahrten mit Uhrzeit, Patientennamen und Ziel."
+        "Du bist ein freundlicher Fahrer-Assistent. Der Nutzer IST der Fahrer "
+        "(nicht der Patient). Sprich ihn mit seinem Vornamen an, dutze ihn. "
+        "Antworte auf Deutsch, kurz und natürlich (1-3 Sätze). "
+        "Nutze die Fahrten-Daten: Nenne Patientennamen, Uhrzeiten und Ziele. "
+        "Keine Aufzählungen — formuliere fließenden Text. "
+        "Wenn der Fahrer fragt ob er jemanden 'fahren' kann: Er meint ob er "
+        "ALS FAHRER eingeteilt ist — nicht ob er selbst gefahren werden will."
     )
 
     user = (
@@ -147,18 +148,18 @@ async def generate_chef_response(text: str) -> str:
     driver_data = ", ".join([d.name for d in drivers]) if drivers else "Keine Fahrer registriert"
 
     system = (
-        "Du bist ein effizienter Disponenten-Assistent für einen "
-        "Krankentransport-Betrieb. Antworte auf Deutsch, professionell und "
-        "prägnant (2-4 Sätze). Gib einen schnellen Überblick — keine langen Listen. "
-        "Fasse zusammen: wie viele Fahrten, wie viele Fahrer aktiv, "
-        "gibt es unzugewiesene Fahrten oder Probleme?"
+        "Du bist ein Disponenten-Assistent für einen Krankentransport-Betrieb. "
+        "Antworte auf Deutsch, professionell und direkt (2-3 Sätze). "
+        "Gib einen schnellen Überblick: Anzahl Fahrten, zugewiesen/unzugewiesen, "
+        "aktive Fahrer. Nenne konkrete Uhrzeiten und Namen. "
+        "Keine Aufzählungen — formuliere Fließtext."
     )
 
     user = (
         f"Der Disponent fragt: \"{text}\"\n\n"
-        f"Heutige Fahrten:\n{trip_data}\n\n"
-        f"Aktive Fahrer: {driver_data}\n\n"
-        f"Antworte professionell auf Deutsch."
+        f"Heutige Fahrten ({len(trips)}):\n{trip_data}\n\n"
+        f"Aktive Fahrer ({len(drivers)}): {driver_data}\n\n"
+        f"Antworte direkt und professionell."
     )
 
     response = await _llm_generate(system, user)
