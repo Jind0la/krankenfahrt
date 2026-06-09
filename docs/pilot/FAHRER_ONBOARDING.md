@@ -9,7 +9,7 @@ Dieses System ersetzt den menschlichen Disponenten durch einen KI-gesteuerten Te
 
 1. Installiere Telegram auf deinem Smartphone (iOS/Android) oder nutze die Desktop-Version
 2. Du erhältst einen Einladungslink von deinem Disponenten
-3. Öffne den Link und starte den **Krankenfahrt Fahrer-Bot** (@krankenfahrt_fahrer_bot)
+3. Öffne den Link und starte den **@FahrLenkerBot** (Krankenfahrt Fahrer-Bot)
 4. Sende `/start` — der Bot begrüßt dich und zeigt deine heutigen Fahrten
 
 ## Schritt 2: Erste Fahrt
@@ -54,13 +54,13 @@ Statt Knöpfe zu drücken, kannst du auch **Sprachnachrichten** an den Bot sende
 ## Support-Kanal
 
 Bei Fragen oder Problemen:
-- Telegram-Gruppe: **Krankenfahrt Pilot-Support** (Einladungslink folgt)
+- Telegram-Gruppe: **Krankenfahrt Pilot-Support** — Nachricht an @FahrtenChefBot mit `/support` für Einladung
 - Oder direkt an deinen Disponenten per Telegram
 
 ## Feedback
 
 Nach jeder Schicht bitten wir dich um ein kurzes Feedback (2 Minuten):
-- Link zum Feedback-Formular: [wird vor Pilot-Start bereitgestellt]
-- Oder direkt im Support-Chat: Schicke eine Nachricht mit `/feedback`
+- Sende `/feedback` an @FahrLenkerBot — das Formular öffnet sich direkt im Chat
+- Oder schreib deine Rückmeldung direkt in den Support-Chat
 
 **Deine Rückmeldung hilft uns, das System zu verbessern!**

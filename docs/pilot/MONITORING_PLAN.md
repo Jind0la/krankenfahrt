@@ -47,13 +47,13 @@ railway logs | grep -i "error\|exception\|traceback"
 
 ## Backup-Strategie
 
-- **Datenbank**: SQLite-Datei wird täglich via `railway run` gesichert
-- **Backup-Skript**:
+- **Datenbank**: SQLite-Datei (`/app/data/krankenfahrt.db`) wird via Railway Volume gesichert
+- **Backup-Skript** (läuft als Cron-Job im Container):
   ```bash
-  railway run "cp /app/data/krankenfahrt.db /app/data/backup-$(date +%Y%m%d).db"
+  cp /app/data/krankenfahrt.db /app/data/backup-$(date +%Y%m%d).db
   ```
-- **Aufbewahrung**: 7 tägliche Backups (rollierend)
-- **Wiederherstellung**: `railway run "cp /app/data/backup-YYYYMMDD.db /app/data/krankenfahrt.db"` + Neustart
+- **Aufbewahrung**: 7 tägliche Backups (rollierend, älteste werden überschrieben)
+- **Wiederherstellung**: `cp /app/data/backup-YYYYMMDD.db /app/data/krankenfahrt.db` + Railway-Neustart
 
 ## Incident Response
 
