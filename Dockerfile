@@ -9,15 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy project files
 COPY pyproject.toml .
-COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY src/ src/
 
 # Install dependencies with voice support
 RUN pip install --no-cache-dir -e ".[voice]" && \
     pip install --no-cache-dir tortoise-orm[aiosqlite]
-
-# Copy application
-COPY src/ src/
 
 # Create data and model cache directories
 RUN mkdir -p /app/data /cache/models
@@ -28,4 +24,4 @@ ENV WHISPER_MODEL=small
 ENV WHISPER_DEVICE=cpu
 ENV HEALTH_PORT=${PORT:-8080}
 
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python3", "-m", "krankenfahrt.main"]

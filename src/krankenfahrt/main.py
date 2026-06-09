@@ -183,6 +183,32 @@ async def build_chef_bot() -> Application:
     return app
 
 
+async def _precache_whisper() -> None:
+    """Pre-cache the faster-whisper model during startup.
+
+    Downloads the model if not already cached in WHISPER_CACHE_DIR.
+    On first deploy this takes ~30-60s for the 'small' model (~500MB).
+    Subsequent deploys with persistent volume skip the download.
+    """
+    import glob
+    import os as _os
+
+    cache_dir = config.WHISPER_CACHE_DIR
+    model_size = config.WHISPER_MODEL
+    device = config.WHISPER_DEVICE
+
+    # Check if already cached
+    cfgs = glob.glob(_os.path.join(cache_dir, "**", "config.json"), recursive=True)
+    if cfgs:
+        logger.info("Whisper model already cached", dir=cache_dir, count=len(cfgs))
+        return
+
+    logger.info("Downloading whisper model...", model=model_size, device=device, dir=cache_dir)
+    from faster_whisper import WhisperModel
+    WhisperModel(model_size, device=device, compute_type="int8", download_root=cache_dir)
+    logger.info("Whisper model download complete")
+
+
 async def main() -> None:
     """Start all bots + health-check HTTP server + alerting."""
     setup_logging()
@@ -192,6 +218,13 @@ async def main() -> None:
     # Init database first (health server needs it for the DB ping)
     await init_database()
     logger.info("Database initialized")
+
+    # Pre-cache whisper model during startup so first transcription is fast.
+    # Model loads from WHISPER_CACHE_DIR; downloads ~1-2 GB on first deploy.
+    try:
+        await _precache_whisper()
+    except Exception:
+        logger.warning("Whisper pre-cache failed — transcription will lazy-load", exc_info=True)
 
     # Start health-check HTTP server with DB liveness probe
     db_check = make_db_health_check()
