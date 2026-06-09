@@ -776,14 +776,8 @@ async def handle_natural_message(update: Update, context: ContextTypes.DEFAULT_T
             parse_mode="Markdown",
         )
     elif intent.intent == "info":
-        await update.message.reply_text(
-            "🚗 *Fahrer-Bot*\n\n"
-            "Sprich einfach mit mir!\n"
-            "\"Was hab ich heute?\" → Tagesübersicht\n"
-            "\"Ich mach Pause\" → Pause starten\n"
-            "\"Bin zurück\" → wieder bereit\n\n"
-            "Oder: /heute • /pause • Sprachnachricht"
-        )
+        # Show actual upcoming trips, not generic help
+        await cmd_heute(update, context)
     else:
         await update.message.reply_text(
             "❓ Sag einfach was du brauchst — \"Was hab ich heute?\", "

@@ -1372,17 +1372,8 @@ async def handle_natural_message(update: Update, context: ContextTypes.DEFAULT_T
             parse_mode="Markdown",
         )
     elif intent.intent == "info":
-        await update.message.reply_text(
-            "👔 *Krankenfahrt Chef-Bot*\n\n"
-            "Sprich einfach mit mir! Hier sind die wichtigsten Funktionen:\n\n"
-            "📊 *Fahrten anzeigen* — sag \"Dashboard\" oder \"was steht heute an\"\n"
-            "👤 *Fahrer verwalten* — sag \"Fahrerliste\" oder \"neuen Fahrer anlegen\"\n"
-            "📎 *Export* — sag \"Export\" oder \"Abrechnung\"\n"
-            "⚠️ *Probleme* — sag \"Eskalationen\" oder \"was ist offen\"\n\n"
-            "Oder nutze die klassischen /commands:\n"
-            "/dashboard • /fahrer • /fahrzeug • /export • /eskalationen",
-            parse_mode="Markdown",
-        )
+        # Show dashboard — most useful default for "what's going on"
+        await cmd_dashboard(update, context)
     else:
         await update.message.reply_text(
             "❓ Das habe ich nicht verstanden. Sag einfach was du tun möchtest — "
