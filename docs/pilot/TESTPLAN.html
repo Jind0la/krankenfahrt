@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Krankenfahrt — Pilot-Testplan</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d2991d;
+    --orange: #db6d28;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+  }
+  h1 {
+    font-size: 2rem;
+    margin-bottom: 0.25rem;
+    color: #fff;
+  }
+  .subtitle {
+    color: var(--muted);
+    margin-bottom: 1.5rem;
+    font-size: 0.95rem;
+  }
+  .progress-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .progress-fill {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-fill-inner {
+    height: 100%;
+    background: var(--green);
+    transition: width 0.3s ease;
+    border-radius: 4px;
+  }
+  .progress-text {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--green);
+    font-size: 0.95rem;
+  }
+  .actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  button {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: background 0.15s;
+  }
+  button:hover { background: #1f2937; }
+  button.accent { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  button.accent:hover { background: #2563eb; }
+  button.danger { border-color: var(--red); color: var(--red); }
+  button.danger:hover { background: #2d1215; }
+
+  .category {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+  }
+  .cat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+  }
+  .cat-header:hover { background: #1c2128; }
+  .cat-header h3 {
+    font-size: 1.05rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .cat-icon { font-size: 1.3rem; }
+  .cat-badge {
+    font-size: 0.75rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    background: var(--border);
+    color: var(--muted);
+  }
+  .cat-body { padding: 0 1.25rem 1rem; }
+  .cat-body.collapsed { display: none; }
+
+  .test-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid #1c2128;
+  }
+  .test-item:last-child { border-bottom: none; }
+  .test-item input[type="checkbox"] {
+    margin-top: 0.2rem;
+    width: 18px;
+    height: 18px;
+    accent-color: var(--green);
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .test-item label {
+    flex: 1;
+    cursor: pointer;
+  }
+  .test-item .test-title {
+    font-weight: 500;
+  }
+  .test-item .test-desc {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 0.15rem;
+  }
+  .test-item .test-steps {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.25rem;
+    font-family: "SF Mono", "Fira Code", monospace;
+    background: #0d1117;
+    padding: 0.35rem 0.6rem;
+    border-radius: 4px;
+    display: inline-block;
+  }
+  .test-result {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+  }
+  .result-pass { background: #1a3a1a; color: var(--green); }
+  .result-fail { background: #3a1a1a; color: var(--red); }
+  .result-pend { background: #1c2128; color: var(--muted); }
+
+  .passnote {
+    margin-left: 2.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.1rem;
+    margin-bottom: 0.3rem;
+  }
+  .passnote input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    width: 280px;
+  }
+
+  footer {
+    margin-top: 3rem;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  @media print {
+    body { background: #fff; color: #000; max-width: 100%; padding: 1rem; }
+    .actions, .progress-bar, footer { display: none; }
+    .category { border: 1px solid #ccc; break-inside: avoid; }
+    .cat-header { background: #f0f0f0; }
+  }
+</style>
+</head>
+<body>
+
+<h1>🚑 Krankenfahrt — Pilot-Testplan</h1>
+<p class="subtitle">Interaktiver Testplan · Stand: 9. Juni 2026 · Haken setzen = gespeichert (localStorage)</p>
+
+<div class="progress-bar">
+  <div class="progress-fill"><div class="progress-fill-inner" id="progressFill"></div></div>
+  <span class="progress-text" id="progressText">0 / 0</span>
+</div>
+
+<div class="actions">
+  <button onclick="resetAll()" class="danger">↺ Alle zurücksetzen</button>
+  <button onclick="expandAll()">⊞ Alle ausklappen</button>
+  <button onclick="collapseAll()">⊟ Alle einklappen</button>
+  <button onclick="window.print()">🖨 Drucken</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- CATEGORY 1: PATIENT-BOT -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="category">
+  <div class="cat-header" onclick="toggleCat(this)">
+    <h3><span class="cat-icon">🧓</span> @FahrGastBot — Patienten-Bot</h3>
+    <span class="cat-badge" data-cat="patient">0/8</span>
+  </div>
+  <div class="cat-body" data-cat="patient">
+
+    <div class="test-item">
+      <input type="checkbox" id="P1" data-cat="patient" onchange="save()">
+      <label for="P1">
+        <div class="test-title">P1 · /start — Registrierung</div>
+        <div class="test-desc">Neuer Patient startet den Bot, wird begrüßt und nach Name/Adresse/Krankenkasse gefragt.</div>
+        <div class="test-steps">/start → Eingabe: "Max Mustermann, Musterstraße 1, AOK Bayern"</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="P2" data-cat="patient" onchange="save()">
+      <label for="P2">
+        <div class="test-title">P2 · Buchung per Text (NLU)</div>
+        <div class="test-desc">Patient schickt natürliche Sprachnachricht/Text: „Ich muss morgen um 9 Uhr zur Dialyse ins Klinikum Nord, Rückfahrt ca. 12:30"</div>
+        <div class="test-steps">Text senden → KI extrahiert: Datum, Ziel, Zeit, Rückfahrt → Bestätigung anzeigen</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="P3" data-cat="patient" onchange="save()">
+      <label for="P3">
+        <div class="test-title">P3 · Buchung: unvollständige Angaben</div>
+        <div class="test-desc">Patient sagt nur „zur Dialyse morgen". Bot fragt nach fehlenden Infos (Uhrzeit, Ziel).</div>
+        <div class="test-steps">"zur Dialyse morgen" → Bot: "Um wie viel Uhr? Welches Krankenhaus?"</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="P4" data-cat="patient" onchange="save()">
+      <label for="P4">
+        <div class="test-title">P4 · Profil anzeigen & bearbeiten</div>
+        <div class="test-desc">Patient ruft /profil auf, sieht gespeicherte Daten, kann Adresse/Kasse ändern.</div>
+        <div class="test-steps">/profil → Anzeige → /profil_edit → neue Adresse eingeben → Bestätigung</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="P5" data-cat="patient" onchange="save()">
+      <label for="P5">
+        <div class="test-title">P5 · Wiederkehrende Fahrt anlegen (Template)</div>
+        <div class="test-desc">Patient legt wiederkehrende Fahrt an: „Jeden Mo, Mi, Fr um 8:30 Dialyse Klinikum Nord"</div>
+        <div class="test-steps">/vorlage_neu → Tage + Uhrzeit + Ziel → Bestätigung → Anzeige in /vorlagen</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="P6" data-cat="patient" onchange="save()">
+      <label for="P6">
+        <div class="test-title">P6 · Live-Tracking während Fahrt</div>
+        <div class="test-desc">Sobald Fahrer Status „Anfahrt" setzt, bekommt Patient Live-Location-Karte und ETA.</div>
+        <div class="test-steps">Fahrer tippt 🚗 Losfahren → Patient bekommt: „Fahrer Ahmed ist 7 Min entfernt [📍Karte]"</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="P7" data-cat="patient" onchange="save()">
+      <label for="P7">
+        <div class="test-title">P7 · Automatische Erinnerungen</div>
+        <div class="test-desc">Patient bekommt Push 24h + 1h vor Abholung mit Fahrer-Info und Abholzeit.</div>
+        <div class="test-steps">Fahrt morgen 9:00 → Heute 9:00: „⏰ Morgen Abholung" → Morgen 8:00: „🚗 Fahrer kommt"</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="P8" data-cat="patient" onchange="save()">
+      <label for="P8">
+        <div class="test-title">P8 · Storno durch Patient</div>
+        <div class="test-desc">Patient storniert eigene Fahrt — System informiert Fahrer + Chef.</div>
+        <div class="test-steps">/storno → Fahrt auswählen → Bestätigung → Fahrer bekommt Storno-Push</div>
+      </label>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- CATEGORY 2: DRIVER-BOT -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="category">
+  <div class="cat-header" onclick="toggleCat(this)">
+    <h3><span class="cat-icon">🚗</span> @FahrLenkerBot — Fahrer-Bot</h3>
+    <span class="cat-badge" data-cat="driver">0/11</span>
+  </div>
+  <div class="cat-body" data-cat="driver">
+
+    <div class="test-item">
+      <input type="checkbox" id="D1" data-cat="driver" onchange="save()">
+      <label for="D1">
+        <div class="test-title">D1 · /start — Fahrer-Registrierung</div>
+        <div class="test-desc">Fahrer startet Bot, wird erkannt (Telegram-ID muss in DB sein) und begrüßt.</div>
+        <div class="test-steps">/start → "Willkommen Ahmed! Deine heutigen Fahrten: …"</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="D2" data-cat="driver" onchange="save()">
+      <label for="D2">
+        <div class="test-title">D2 · Auftrag annehmen</div>
+        <div class="test-desc">Neuer Auftrag kommt per Push mit Inline-Buttons: [✅ Annehmen] [❌ Ablehnen]</div>
+        <div class="test-steps">Chef weist Fahrt zu → Fahrer bekommt Nachricht → Tippt ✅ → Status "zugewiesen"</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="D3" data-cat="driver" onchange="save()">
+      <label for="D3">
+        <div class="test-title">D3 · Auftrag ablehnen → Eskalation</div>
+        <div class="test-desc">Fahrer lehnt ab → System sucht anderen Fahrer oder eskaliert an Chef.</div>
+        <div class="test-steps">Fahrer tippt ❌ Ablehnen → Auto-Dispatch sucht Ersatz → oder Chef bekommt Eskalation</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="D4" data-cat="driver" onchange="save()">
+      <label for="D4">
+        <div class="test-title">D4 · Status-Knöpfe: kompletter Fahrtablauf</div>
+        <div class="test-desc">Fahrer durchläuft alle Status-Updates per Knopfdruck: Losfahren → Angekommen → Patient an Bord → Abgesetzt → Abschließen</div>
+        <div class="test-steps">🚗 Losfahren → 📍 Angekommen → 👤 Patient an Bord → ✅ Abgesetzt → 🏁 Abschließen</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="D5" data-cat="driver" onchange="save()">
+      <label for="D5">
+        <div class="test-title">D5 · Status-Validierung (falscher Status blockiert)</div>
+        <div class="test-desc">Fahrer versucht „Abgesetzt" vor „Patient an Bord" → Bot blockt mit Hinweis.</div>
+        <div class="test-steps">Status "angefahren" → Tippt ✅ Abgesetzt → ❌ „Erst Patient an Bord melden"</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="D6" data-cat="driver" onchange="save()">
+      <label for="D6">
+        <div class="test-title">D6 · /heute — Tagesübersicht</div>
+        <div class="test-desc">Fahrer ruft /heute auf, sieht alle zugewiesenen Fahrten mit Status, Zeiten, Adressen.</div>
+        <div class="test-steps">/heute → Liste: 08:30 Frau Schmidt → Klinikum [angefahren] | 10:00 Herr Müller → Praxis [geplant]</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="D7" data-cat="driver" onchange="save()">
+      <label for="D7">
+        <div class="test-title">D7 · /pause — Pause starten & beenden</div>
+        <div class="test-desc">Fahrer startet Pause, bekommt keine neuen Aufträge. Pausenende setzt Status zurück.</div>
+        <div class="test-steps">/pause → „Pause bis 10:30" → nach 30 Min: /pause beenden → wieder aktiv</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="D8" data-cat="driver" onchange="save()">
+      <label for="D8">
+        <div class="test-title">D8 · Problem melden</div>
+        <div class="test-desc">Fahrer meldet Problem (Patient nicht da, Unfall, Stau) per Button.</div>
+        <div class="test-steps">⚠️ Problem → Auswahl: Patient nicht angetroffen → Chef bekommt Eskalation</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="D9" data-cat="driver" onchange="save()">
+      <label for="D9">
+        <div class="test-title">D9 · Sprachnachricht → Status-Update</div>
+        <div class="test-desc">Fahrer schickt Sprachnachricht „Bin angekommen" → Whisper transkribiert → Intent-Erkennung → Status-Update</div>
+        <div class="test-steps">🎙 „Bin angekommen beim Patienten" → Bot: „✅ ankunft_melden — Fahrt #42"</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="D10" data-cat="driver" onchange="save()">
+      <label for="D10">
+        <div class="test-title">D10 · Sprachnachricht — unbekannte Intent</div>
+        <div class="test-desc">Fahrer sagt etwas ohne Fahrt-Bezug („Das Wetter ist schön") → Bot erkennt „unknown", kein Update.</div>
+        <div class="test-steps">🎙 „Schönes Wetter heute" → Bot: „Keine Fahraktion erkannt. Nutze die Buttons."</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="D11" data-cat="driver" onchange="save()">
+      <label for="D11">
+        <div class="test-title">D11 · Morning-Push</div>
+        <div class="test-desc">Um 6:00 Uhr bekommt jeder Fahrer mit Fahrten heute eine Push-Nachricht mit Tagesplan.</div>
+        <div class="test-steps">06:00 → „☀️ Guten Morgen! Heute: 5 Fahrten. Erste: 08:00 Frau Schmidt → Klinikum Nord"</div>
+      </label>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- CATEGORY 3: CHEF-BOT -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="category">
+  <div class="cat-header" onclick="toggleCat(this)">
+    <h3><span class="cat-icon">👔</span> @FahrtenChefBot — Disponent/Chef-Bot</h3>
+    <span class="cat-badge" data-cat="chef">0/10</span>
+  </div>
+  <div class="cat-body" data-cat="chef">
+
+    <div class="test-item">
+      <input type="checkbox" id="C1" data-cat="chef" onchange="save()">
+      <label for="C1">
+        <div class="test-title">C1 · /dashboard — Tagesübersicht</div>
+        <div class="test-desc">Chef sieht alle heutigen Fahrten farbcodiert (🟢 on track / 🟡 leicht verspätet / 🔴 kritisch).</div>
+        <div class="test-steps">/dashboard → Liste: #42 Schmidt → Klinikum [angefahren 🟢] | #43 Müller → Praxis [geplant ⚪]</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="C2" data-cat="chef" onchange="save()">
+      <label for="C2">
+        <div class="test-title">C2 · Fahrer anlegen (CRUD)</div>
+        <div class="test-desc">Chef legt neuen Fahrer per Chat-Befehl an: Name, Telefon, P-Schein, Fahrzeug-Zuordnung.</div>
+        <div class="test-steps">/fahrer add Ahmed Mustermann 017612345678 → ✅ Fahrer angelegt (ID 3)</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="C3" data-cat="chef" onchange="save()">
+      <label for="C3">
+        <div class="test-title">C3 · Fahrer editieren & deaktivieren</div>
+        <div class="test-desc">Chef ändert Fahrerdaten (Telefon, Fahrzeug) oder deaktiviert Fahrer temporär.</div>
+        <div class="test-steps">/fahrer update 3 pschein ja → /fahrer deactivate 3 → Fahrer ausgegraut in Liste</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="C4" data-cat="chef" onchange="save()">
+      <label for="C4">
+        <div class="test-title">C4 · Fahrzeug anlegen (CRUD)</div>
+        <div class="test-desc">Chef legt Fahrzeug an: Kennzeichen, Typ (KTW/RTW/Taxi), Kapazität.</div>
+        <div class="test-steps">/fahrzeug add B-KF-123 KTW 1 → ✅ Fahrzeug angelegt → /fahrzeug list</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="C5" data-cat="chef" onchange="save()">
+      <label for="C5">
+        <div class="test-title">C5 · Manuelle Fahrten-Zuteilung</div>
+        <div class="test-desc">Chef weist unzugewiesene Fahrt manuell einem Fahrer zu.</div>
+        <div class="test-steps">/dashboard → Fahrt #42 antippen → „Zuweisen" → Fahrer auswählen → Fahrer bekommt Push</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="C6" data-cat="chef" onchange="save()">
+      <label for="C6">
+        <div class="test-title">C6 · /export — CSV & PDF</div>
+        <div class="test-desc">Chef exportiert Fahrten als CSV (Abrechnung) oder PDF (Muster 4).</div>
+        <div class="test-steps">/export → Zeitraum wählen → Format wählen (CSV/PDF) → Download per Telegram</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="C7" data-cat="chef" onchange="save()">
+      <label for="C7">
+        <div class="test-title">C7 · Eskalation: Fahrer lehnt ab</div>
+        <div class="test-desc">Chef bekommt Eskalations-Nachricht wenn Fahrer Fahrt ablehnt, mit Optionen.</div>
+        <div class="test-steps">Fahrer lehnt ab → Chef: „⚠️ Ahmed hat Fahrt #42 abgelehnt. Optionen: [🔄 Neu zuweisen] [📞 Anrufen]"</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="C8" data-cat="chef" onchange="save()">
+      <label for="C8">
+        <div class="test-title">C8 · Eskalation: Problem-Meldung vom Fahrer</div>
+        <div class="test-desc">Fahrer meldet „Patient nicht angetroffen" → Chef bekommt Eskalation mit Kontext.</div>
+        <div class="test-steps">Fahrer ⚠️ Problem → Chef: „⚠️ Patient Schmidt (#42) nicht angetroffen. [⏰ Warten] [🔄 Stornieren] [📞 Patient]"</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="C9" data-cat="chef" onchange="save()">
+      <label for="C9">
+        <div class="test-title">C9 · /eskalationen — offene Probleme</div>
+        <div class="test-desc">Chef ruft Liste aller offenen Eskalationen auf, kann sie einzeln bearbeiten.</div>
+        <div class="test-steps">/eskalationen → #1: Patient nicht angetroffen (12:34) → antippen → lösen/schließen</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="C10" data-cat="chef" onchange="save()">
+      <label for="C10">
+        <div class="test-title">C10 · Auto-Dispatch: neue Buchung automatisch zugewiesen</div>
+        <div class="test-desc">Patient bucht per Bot → System weist automatisch besten Fahrer zu → Fahrer bekommt Push, Chef sieht's im Dashboard.</div>
+        <div class="test-steps">Patient: „Morgen 9:00 Dialyse" → Fahrer Ahmed bekommt Push → Chef /dashboard zeigt neue Fahrt</div>
+      </label>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- CATEGORY 4: CROSS-SYSTEM & E2E -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="category">
+  <div class="cat-header" onclick="toggleCat(this)">
+    <h3><span class="cat-icon">🔄</span> System-übergreifend & E2E</h3>
+    <span class="cat-badge" data-cat="e2e">0/7</span>
+  </div>
+  <div class="cat-body" data-cat="e2e">
+
+    <div class="test-item">
+      <input type="checkbox" id="E1" data-cat="e2e" onchange="save()">
+      <label for="E1">
+        <div class="test-title">E1 · E2E: Patient bucht → Auto-Dispatch → Fahrer führt aus</div>
+        <div class="test-desc">Kompletter Durchlauf: Patient sendet Buchung → System dispatched → Fahrer akzeptiert → Status-Updates → Patient sieht Live-Tracking → Abgeschlossen.</div>
+        <div class="test-steps">Patient /start → Buchung → Fahrer-Push → Annehmen → 5 Status-Updates → Patient-Tracking → Abschließen</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="E2" data-cat="e2e" onchange="save()">
+      <label for="E2">
+        <div class="test-title">E2 · E2E: Storno durch Patient</div>
+        <div class="test-desc">Patient storniert gebuchte Fahrt → System informiert Fahrer → Fahrt aus Fahrer-Queue entfernt.</div>
+        <div class="test-steps">Patient /storno → Fahrer bekommt „Fahrt #42 storniert" → /heute zeigt Fahrt nicht mehr</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="E3" data-cat="e2e" onchange="save()">
+      <label for="E3">
+        <div class="test-title">E3 · E2E: Fahrer fällt aus → Re-Dispatch</div>
+        <div class="test-desc">Fahrer lehnt Fahrt ab oder meldet Problem → Auto-Dispatch sucht Ersatz → Neuer Fahrer übernimmt.</div>
+        <div class="test-steps">Fahrer A lehnt ab → System sucht Fahrer B → Fahrer B bekommt Push → Akzeptiert → Fahrt läuft weiter</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="E4" data-cat="e2e" onchange="save()">
+      <label for="E4">
+        <div class="test-title">E4 · Status-Synchronisation über alle Bots</div>
+        <div class="test-desc">Wenn Fahrer Status ändert, sehen Patient UND Chef die Aktualisierung in Echtzeit.</div>
+        <div class="test-steps">Fahrer: „Angekommen" → Patient: „Fahrer ist da!" → Chef: Dashboard aktualisiert auf 🟢</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="E5" data-cat="e2e" onchange="save()">
+      <label for="E5">
+        <div class="test-title">E5 · Fehlertoleranz: LLM nicht erreichbar</div>
+        <div class="test-desc">DeepSeek-API down → NLU-Buchung fällt auf Regex-Fallback zurück → Patient kann trotzdem buchen.</div>
+        <div class="test-steps">LLM deaktivieren → Patient: „morgen 9 Uhr Klinikum Nord" → Regelbasierte Extraktion → Buchung OK</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="E6" data-cat="e2e" onchange="save()">
+      <label for="E6">
+        <div class="test-title">E6 · Fehlertoleranz: DB-Neuverbindung</div>
+        <div class="test-desc">Datenbank kurzzeitig nicht erreichbar → System retried mit Backoff → Operation erfolgreich.</div>
+        <div class="test-steps">DB-Verbindung trennen → Fahrer tippt „Losfahren" → 3 Retries → Status korrekt gesetzt</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="E7" data-cat="e2e" onchange="save()">
+      <label for="E7">
+        <div class="test-title">E7 · Health-Endpoint & Railway-Deploy</div>
+        <div class="test-desc">/health gibt 200 OK + DB-Status. Railway-Neustart ohne Telegram-Conflict. Metrics-Endpoint erreichbar.</div>
+        <div class="test-steps">curl /health → {"status":"ok","database":"connected"} | curl /healthz → OK | curl :9090/metrics → Prometheus</div>
+      </label>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- CATEGORY 5: VOICE -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="category">
+  <div class="cat-header" onclick="toggleCat(this)">
+    <h3><span class="cat-icon">🎙️</span> Voice-Pipeline (Whisper + Intent)</h3>
+    <span class="cat-badge" data-cat="voice">0/6</span>
+  </div>
+  <div class="cat-body" data-cat="voice">
+
+    <div class="test-item">
+      <input type="checkbox" id="V1" data-cat="voice" onchange="save()">
+      <label for="V1">
+        <div class="test-title">V1 · faster-whisper geladen & bereit</div>
+        <div class="test-desc">Whisper-Modell erfolgreich beim Startup gecached. Health-Log zeigt „Download complete" oder „already cached".</div>
+        <div class="test-steps">railway logs | grep -i whisper → "Download complete" oder "already cached"</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="V2" data-cat="voice" onchange="save()">
+      <label for="V2">
+        <div class="test-title">V2 · Transkription: Deutsche Sprache korrekt</div>
+        <div class="test-desc">Deutsche Sprachnachricht wird korrekt transkribiert (kein Englisch-Output).</div>
+        <div class="test-steps">🎙 „Ich fahre jetzt los zur ersten Fahrt" → Text: „Ich fahre jetzt los zur ersten Fahrt"</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="V3" data-cat="voice" onchange="save()">
+      <label for="V3">
+        <div class="test-title">V3 · Intent: „losfahren" erkannt</div>
+        <div class="test-desc">Transkript „Ich fahre jetzt los" → Intent „losfahren" mit confidence > 0.8.</div>
+        <div class="test-steps">Transkript → extract_driver_intent() → {action: "losfahren", trigger: "losfahren", confidence: 0.9}</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="V4" data-cat="voice" onchange="save()">
+      <label for="V4">
+        <div class="test-title">V4 · Intent: „ankunft_melden" erkannt</div>
+        <div class="test-desc">Transkript „Bin angekommen beim Patienten" → Intent „ankunft_melden".</div>
+        <div class="test-steps">Transkript → extract_driver_intent() → {action: "ankunft_melden", trigger: "ankunft_melden"}</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="V5" data-cat="voice" onchange="save()">
+      <label for="V5">
+        <div class="test-title">V5 · Intent: „patient_absetzen" erkannt</div>
+        <div class="test-desc">Transkript „Patient ist abgesetzt am Klinikum Nord" → Intent „patient_absetzen".</div>
+        <div class="test-steps">Transkript → extract_driver_intent() → {action: "patient_absetzen", trigger: "patient_absetzen"}</div>
+      </label>
+    </div>
+
+    <div class="test-item">
+      <input type="checkbox" id="V6" data-cat="voice" onchange="save()">
+      <label for="V6">
+        <div class="test-title">V6 · Intent: „problem_melden" erkannt</div>
+        <div class="test-desc">Transkript „Patient nicht zuhause, keiner macht auf" → Intent „problem_melden" mit Note.</div>
+        <div class="test-steps">Transkript → extract_driver_intent() → {action: "problem_melden", params: {note: "Patient nicht zuhause"}}</div>
+      </label>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- NOTES -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="category">
+  <div class="cat-header" onclick="toggleCat(this)">
+    <h3><span class="cat-icon">📝</span> Notizen & Befunde</h3>
+    <span class="cat-badge">Freitext</span>
+  </div>
+  <div class="cat-body">
+    <textarea id="notes" oninput="saveNotes()" placeholder="Hier kannst du während des Tests Notizen, Bugs und Beobachtungen festhalten..."
+      style="width:100%; min-height:150px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.75rem; font-family:inherit; font-size:0.9rem; resize:vertical;"></textarea>
+  </div>
+</div>
+
+<footer>
+  Krankenfahrt Pilot-Testplan · v1.0 · 9. Juni 2026 · Alle Haken in localStorage gespeichert
+</footer>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────
+const CATS = ['patient','driver','chef','e2e','voice'];
+const TOTAL_TESTS = document.querySelectorAll('input[type=checkbox][data-cat]').length;
+
+// ── Persistence ────────────────────────────────────────────────────────
+function save() {
+  const state = {};
+  document.querySelectorAll('input[type=checkbox][data-cat]').forEach(cb => {
+    state[cb.id] = cb.checked;
+  });
+  localStorage.setItem('krankenfahrt-testplan', JSON.stringify(state));
+  updateProgress();
+}
+
+function load() {
+  const raw = localStorage.getItem('krankenfahrt-testplan');
+  if (!raw) return;
+  const state = JSON.parse(raw);
+  Object.entries(state).forEach(([id, checked]) => {
+    const cb = document.getElementById(id);
+    if (cb) cb.checked = checked;
+  });
+  updateProgress();
+}
+
+function saveNotes() {
+  localStorage.setItem('krankenfahrt-testplan-notes', document.getElementById('notes').value);
+}
+
+function loadNotes() {
+  const n = localStorage.getItem('krankenfahrt-testplan-notes');
+  if (n) document.getElementById('notes').value = n;
+}
+
+// ── Progress ───────────────────────────────────────────────────────────
+function updateProgress() {
+  let done = 0;
+  const catCounts = {};
+  CATS.forEach(c => catCounts[c] = { done: 0, total: 0 });
+
+  document.querySelectorAll('input[type=checkbox][data-cat]').forEach(cb => {
+    catCounts[cb.dataset.cat].total++;
+    if (cb.checked) { done++; catCounts[cb.dataset.cat].done++; }
+  });
+
+  const pct = TOTAL_TESTS > 0 ? Math.round(done / TOTAL_TESTS * 100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = done + ' / ' + TOTAL_TESTS + ' (' + pct + '%)';
+
+  CATS.forEach(c => {
+    const badge = document.querySelector(`.cat-badge[data-cat="${c}"]`);
+    if (badge) badge.textContent = catCounts[c].done + '/' + catCounts[c].total;
+  });
+}
+
+// ── Actions ────────────────────────────────────────────────────────────
+function resetAll() {
+  if (!confirm('Alle Test-Haken wirklich zurücksetzen?')) return;
+  document.querySelectorAll('input[type=checkbox][data-cat]').forEach(cb => cb.checked = false);
+  save();
+}
+
+function expandAll() {
+  document.querySelectorAll('.cat-body').forEach(b => b.classList.remove('collapsed'));
+}
+
+function collapseAll() {
+  document.querySelectorAll('.cat-body').forEach(b => b.classList.add('collapsed'));
+}
+
+function toggleCat(header) {
+  const body = header.nextElementSibling;
+  body.classList.toggle('collapsed');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────
+load();
+loadNotes();
+updateProgress();
+</script>
+
+</body>
+</html>
