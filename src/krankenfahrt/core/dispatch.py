@@ -246,16 +246,12 @@ class GreedyDispatchEngine:
         trip: Trip,
         violations: list[ConstraintViolation],
     ) -> None:
-        required_type = await self._get_trip_vehicle_type(trip)
+        # No vehicle assigned → skip check (don't block dispatch).
+        # Many small operators don't track vehicles per driver; the trip
+        # vehicle_type still influences scoring but shouldn't be a hard gate.
         if driver.vehicle is None:
-            violations.append(
-                ConstraintViolation(
-                    ConstraintKind.VEHICLE_TYPE_MISMATCH,
-                    driver.id,
-                    f"Driver has no vehicle assigned (trip requires {required_type})",
-                )
-            )
             return
+        required_type = await self._get_trip_vehicle_type(trip)
         if driver.vehicle.vehicle_type != required_type:
             violations.append(
                 ConstraintViolation(

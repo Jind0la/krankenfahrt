@@ -1022,7 +1022,7 @@ async def _ask_to_rephrase(update: Update) -> None:
 
 async def _try_auto_dispatch(trip, update: Update) -> None:
     """Try to auto-assign a driver to a newly created trip."""
-    from krankenfahrt.core.dispatch import GreedyDispatchEngine
+    from krankenfahrt.core.dispatch import DispatchError, GreedyDispatchEngine
     from krankenfahrt.models.schema import Driver
 
     drivers = await Driver.filter(active=True).all()
@@ -1031,10 +1031,27 @@ async def _try_auto_dispatch(trip, update: Update) -> None:
         return
 
     engine = GreedyDispatchEngine()
-    assignment = await engine.find_best_driver(trip, drivers)
-
-    if assignment.driver is None:
-        logger.info("No suitable driver found for trip %d", trip.id)
+    try:
+        assignment = await engine.find_best_driver(trip, drivers)
+    except DispatchError as e:
+        logger.warning("Auto-dispatch failed for trip %d: %s", trip.id, e)
+        # Notify chef about unassigned trip
+        try:
+            from krankenfahrt.config import config as _cfg
+            for admin_id in _cfg.ADMIN_TELEGRAM_IDS:
+                await update.get_bot().send_message(
+                    chat_id=admin_id,
+                    text=(
+                        f"⚠️ *Auto-Dispatch fehlgeschlagen*\\n\\n"
+                        f"Fahrt #{trip.id}: {trip.pickup_addr} → {trip.dest_addr}\\n"
+                        f"🕐 {trip.scheduled_pickup.strftime('%d.%m.%Y %H:%M')}\\n\\n"
+                        f"Grund: {e}\\n\\n"
+                        f"Bitte manuell über /dashboard zuweisen."
+                    ),
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+        except Exception:
+            logger.warning("Failed to notify chef about dispatch failure")
         return
 
     # Assign driver
@@ -1055,10 +1072,10 @@ async def _try_auto_dispatch(trip, update: Update) -> None:
         await update.get_bot().send_message(
             chat_id=assignment.driver.telegram_id,
             text=(
-                f"📋 *Neue Fahrt zugewiesen!*\n\n"
-                f"👤 {trip.patient.name if await trip.patient else '?'}\n"
-                f"📍 {trip.pickup_addr} → {trip.dest_addr}\n"
-                f"🕐 {trip.scheduled_pickup.strftime('%d.%m.%Y %H:%M')}\n\n"
+                f"📋 *Neue Fahrt zugewiesen!*\\n\\n"
+                f"👤 {trip.patient.name if await trip.patient else '?'}\\n"
+                f"📍 {trip.pickup_addr} → {trip.dest_addr}\\n"
+                f"🕐 {trip.scheduled_pickup.strftime('%d.%m.%Y %H:%M')}\\n\\n"
                 f"Nutze /heute für deine Fahrten."
             ),
             parse_mode=ParseMode.MARKDOWN,
