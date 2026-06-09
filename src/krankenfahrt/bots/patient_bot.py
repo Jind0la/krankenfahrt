@@ -199,6 +199,43 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+# ── /profil_as (admin view another patient) ──────────────────────────────────
+
+async def cmd_profil_as(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin views another patient's profile: /profil_as <telegram_id>."""
+    if update.effective_user is None or update.message is None:
+        return
+
+    telegram_id = update.effective_user.id
+    if not _is_admin(telegram_id):
+        await update.message.reply_text("⛔ Nur für Administratoren.")
+        return
+
+    args = context.args
+    if not args or not args[0].isdigit():
+        await update.message.reply_text(
+            "Verwendung: `/profil_as <Telegram-ID>`\n"
+            "Beispiel: `/profil_as 123456789`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    target_id = int(args[0])
+    patient = await _resolve_target_patient(telegram_id, admin_viewing_id=target_id)
+
+    if patient is None:
+        await update.message.reply_text(
+            f"❌ Kein Patient mit Telegram-ID `{target_id}` gefunden.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    await update.message.reply_text(
+        f"👁️ *Admin-Ansicht:*\n{_format_profile(patient)}",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
 # ── /profil (view) ─────────────────────────────────────────────────────────
 
 async def cmd_profil(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -996,7 +1033,9 @@ async def handle_booking_message(
         await _handle_book_intent(update, patient, intent)
     elif action == "info":
         await _handle_info_intent(update, patient)
-    elif action in ("recurring", "cancel", "change"):
+    elif action == "cancel":
+        await _handle_cancel_intent(update, patient, intent)
+    elif action in ("recurring", "change"):
         await update.message.reply_text(
             "ℹ️ Diese Funktion ist noch nicht verfügbar. "
             "Bitte kontaktiere unseren Support für "
@@ -1223,6 +1262,91 @@ async def _handle_book_intent(
         logger.warning("Auto-dispatch failed for trip %d", trip.id, exc_info=True)
 
 
+async def _handle_cancel_intent(
+    update: Update, patient: Patient, intent
+) -> None:
+    """Cancel a patient's upcoming trip based on NLU intent."""
+    from datetime import datetime as dt
+
+    # Find upcoming trips for this patient
+    now = dt.now()
+    trips = await Trip.filter(
+        patient=patient,
+        scheduled_pickup__gte=now,
+        status__in=("geplant", "zugewiesen"),
+    ).order_by("scheduled_pickup").limit(5)
+
+    if not trips:
+        await update.message.reply_text(
+            "📋 Du hast keine anstehenden Fahrten, die storniert werden könnten."
+        )
+        return
+
+    # If only one trip, cancel directly with confirmation
+    if len(trips) == 1:
+        trip = trips[0]
+        await _cancel_trip(trip, update, patient)
+        return
+
+    # Multiple trips — let user pick
+    lines = ["📋 *Welche Fahrt möchtest du stornieren?*\n"]
+    for i, t in enumerate(trips, 1):
+        lines.append(
+            f"{i}. {t.scheduled_pickup.strftime('%d.%m.%Y %H:%M')} — "
+            f"{t.pickup_addr} → {t.dest_addr} ({t.status})"
+        )
+    lines.append("\nAntworte mit der Nummer (z.B. \"1\") oder sende /start fürs Hauptmenü.")
+    await update.message.reply_text(
+        "\n".join(lines), parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def _cancel_trip(trip, update: Update, patient: Patient) -> None:
+    """Execute trip cancellation: update status, notify driver, log event."""
+    from krankenfahrt.models.schema import TripEvent
+
+    old_status = trip.status
+    trip.status = "storniert"
+    await trip.save()
+
+    await TripEvent.create(
+        trip_id=trip.id,
+        event_type="cancelled",
+        message=f"Patient cancelled (was {old_status})",
+    )
+
+    # Notify driver if assigned
+    if trip.driver_id:
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"https://api.telegram.org/bot{config.DRIVER_BOT_TOKEN}/sendMessage",
+                    json={
+                        "chat_id": (await trip.driver).telegram_id,
+                        "text": (
+                            f"❌ *Fahrt storniert*\n\n"
+                            f"Fahrt #{trip.id}: {trip.pickup_addr} → {trip.dest_addr}\n"
+                            f"🕐 {trip.scheduled_pickup.strftime('%d.%m.%Y %H:%M')}\n\n"
+                            f"Der Patient hat die Fahrt abgesagt."
+                        ),
+                        "parse_mode": "Markdown",
+                    },
+                    timeout=10,
+                )
+        except Exception:
+            logger.warning("Failed to notify driver about cancellation")
+
+    await update.message.reply_text(
+        f"✅ *Fahrt storniert!*\n\n"
+        f"📅 {trip.scheduled_pickup.strftime('%d.%m.%Y %H:%M')}\n"
+        f"📍 {trip.pickup_addr} → {trip.dest_addr}\n\n"
+        f"Die Fahrt wurde erfolgreich abgesagt.",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    logger.info("Trip %d cancelled by patient %d", trip.id, patient.id)
+
+
 async def _handle_info_intent(update: Update, patient: Patient) -> None:
     """Show upcoming trips for the patient."""
     from datetime import datetime as dt
@@ -1291,6 +1415,7 @@ def register_handlers(app: Application) -> None:
     # Simple commands
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("profil", cmd_profil))
+    app.add_handler(CommandHandler("profil_as", cmd_profil_as))
     app.add_handler(CommandHandler("vorlagen", cmd_vorlagen))
     app.add_handler(CommandHandler("vorlage_show", cmd_vorlage_show))
     app.add_handler(CommandHandler("vorlage_del", cmd_vorlage_del))

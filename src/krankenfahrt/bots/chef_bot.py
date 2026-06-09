@@ -1337,15 +1337,124 @@ async def cmd_assign_callback(
 # =============================================================================
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# Conversational Driver Add (NLU extraction)
+# ═════════════════════════════════════════════════════════════════════════════
+
+_DRIVER_EXTRACT_PROMPT = """Extrahiere aus der Nachricht Name und Telefonnummer für einen neuen Fahrer.
+Antworte AUSSCHLIESSLICH mit JSON: {"name": "Vorname Nachname", "phone": "0176..."}
+Wenn du nichts extrahieren kannst: {"name": null, "phone": null}"""
+
+
+async def _handle_conversational_driver_add(update: Update, text: str) -> None:
+    """Extract name + phone from natural language, then create driver."""
+    import httpx, json as _json
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{config.DEEPSEEK_BASE_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {config.DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {"role": "system", "content": _DRIVER_EXTRACT_PROMPT},
+                        {"role": "user", "content": text},
+                    ],
+                    "temperature": 0.0,
+                    "max_tokens": 100,
+                },
+                timeout=10.0,
+            )
+            data = resp.json()
+            content = data["choices"][0]["message"]["content"].strip()
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+            extracted = _json.loads(content.strip())
+    except Exception:
+        logger.warning("LLM extraction failed for driver_add", exc_info=True)
+        await update.message.reply_text(
+            "📋 *Fahrer anlegen* — nutze bitte:\n"
+            "`/fahrer add <Vorname> <Nachname> <Telefon> [Telegram-ID]`",
+            parse_mode="Markdown",
+        )
+        return
+
+    name = extracted.get("name")
+    phone = extracted.get("phone")
+
+    if not name or not phone:
+        await update.message.reply_text(
+            "🤔 Konnte Name und Telefon nicht erkennen. "
+            "Bitte nutze: `/fahrer add Max Mustermann 017612345678`",
+            parse_mode="Markdown",
+        )
+        return
+
+    # Create the driver
+    from krankenfahrt.models.schema import Driver
+    from krankenfahrt.resilience.db_retry import db_retry
+
+    existing = await Driver.filter(name__iexact=name).first()
+    if existing:
+        await update.message.reply_text(
+            f"⚠️ Fahrer *{name}* existiert bereits (ID {existing.id}).",
+            parse_mode="Markdown",
+        )
+        return
+
+    driver = await db_retry(
+        lambda: Driver.create(name=name, phone=phone, active=True),
+        operation_name="driver_create_conversational",
+    )
+    logger.info("Driver created via NLU: id=%d name=%s", driver.id, name)
+
+    await update.message.reply_text(
+        f"✅ *Fahrer angelegt!*\n\n"
+        f"*ID {driver.id}* — {driver.name}\n"
+        f"📞 {driver.phone}\n"
+        f"Status: aktiv\n\n"
+        f"Tipp: Mit `/fahrer update {driver.id} pschein ja` "
+        f"kannst du den Personenbeförderungsschein hinterlegen.",
+        parse_mode="Markdown",
+    )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Natural Language Handler (Chef)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
 async def handle_natural_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle natural language messages: generate conversational response via LLM."""
+    """Handle natural language messages: classify intent, act or respond conversationally."""
     text = update.message.text.strip()
     if not text:
         return
 
-    from krankenfahrt.services.response_gen import generate_chef_response
-
     logger.info("Chef NLU: %s", text[:60])
+
+    # First pass: check for actionable intents via keyword matching (fast)
+    from krankenfahrt.services.nlu import classify_chef
+    intent = await classify_chef(text)
+
+    # Actionable intents that don't need conversational response
+    if intent.intent == "driver_add":
+        await _handle_conversational_driver_add(update, text)
+        return
+    elif intent.intent == "export":
+        await cmd_export(update, context)
+        return
+    elif intent.intent == "escalate":
+        await _handle_escalation_list(update, context)
+        return
+
+    # Default: conversational response via LLM
+    from krankenfahrt.services.response_gen import generate_chef_response
     response = await generate_chef_response(text)
     logger.info("Chef NLU response (%d chars): %s", len(response), response[:120])
     await update.message.reply_text(response, parse_mode="Markdown")
