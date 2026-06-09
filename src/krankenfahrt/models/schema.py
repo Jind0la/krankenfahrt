@@ -72,8 +72,8 @@ class RecurringTrip(Model):
     pickup_addr = fields.TextField()
     dest_addr = fields.TextField()
     cron_days = fields.CharField(max_length=50)  # "Mo,Mi,Fr"
-    pickup_time = fields.TimeField()
-    return_time = fields.TimeField(null=True)
+    pickup_time = fields.CharField(max_length=8)  # "HH:MM" or "HH:MM:SS"
+    return_time = fields.CharField(max_length=8, null=True)  # "HH:MM" or "HH:MM:SS" or None
     vehicle_type = fields.CharField(max_length=20, default="Sitz")
     active_until = fields.DateField(null=True)
     created_at = fields.DatetimeField(auto_now_add=True)

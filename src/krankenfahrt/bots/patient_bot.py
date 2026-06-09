@@ -133,6 +133,15 @@ def _format_profile(patient: Patient) -> str:
     )
 
 
+def _fmt_time(val) -> str:
+    """Format a time value as HH:MM, handling both datetime.time objects and strings."""
+    if val is None:
+        return "—"
+    if isinstance(val, str):
+        return val[:5]  # Already "HH:MM"
+    return val.strftime("%H:%M")  # datetime.time
+
+
 def _format_template(template: RecurringTrip) -> str:
     """Format a recurring trip template as readable text."""
     return (
@@ -140,8 +149,8 @@ def _format_template(template: RecurringTrip) -> str:
         f"*Abholung:* {template.pickup_addr}\n"
         f"*Ziel:* {template.dest_addr}\n"
         f"*Tage:* {template.cron_days}\n"
-        f"*Abholzeit:* {template.pickup_time.strftime('%H:%M')}\n"
-        f"*Rückfahrt:* {template.return_time.strftime('%H:%M') if template.return_time else '—'}\n"
+        f"*Abholzeit:* {_fmt_time(template.pickup_time)}\n"
+        f"*Rückfahrt:* {_fmt_time(template.return_time)}\n"
         f"*Fahrzeugtyp:* {template.vehicle_type}\n"
         f"*Aktiv bis:* {template.active_until.strftime('%d.%m.%Y') if template.active_until else 'unbegrenzt'}"
     )
@@ -433,7 +442,7 @@ async def cmd_vorlagen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         active = "✅" if tpl.active_until is None or tpl.active_until >= dtime.now().date() else "⏸️"
         lines.append(
             f"{active} #{tpl.id}: {tpl.pickup_addr[:30]} → {tpl.dest_addr[:30]}\n"
-            f"   _{tpl.cron_days} um {tpl.pickup_time.strftime('%H:%M')}_"
+            f"   _{tpl.cron_days} um {_fmt_time(tpl.pickup_time)}_"
         )
 
     lines.append(
@@ -737,13 +746,21 @@ async def callback_vorlage_neu_confirm(
     patient_id = context.user_data.get("tpl_patient_id")
     patient = await Patient.get(id=patient_id)
 
+    # Serialize time objects to "HH:MM" strings (SQLite can't bind datetime.time)
+    def _serialize_time(t):
+        if t is None:
+            return None
+        if isinstance(t, str):
+            return t[:5]
+        return t.strftime("%H:%M")
+
     template = await RecurringTrip.create(
         patient=patient,
         pickup_addr=context.user_data.get("tpl_pickup", ""),
         dest_addr=context.user_data.get("tpl_dest", ""),
         cron_days=context.user_data.get("tpl_days", ""),
-        pickup_time=context.user_data.get("tpl_pickup_time", dtime(8, 0)),
-        return_time=context.user_data.get("tpl_return_time"),
+        pickup_time=_serialize_time(context.user_data.get("tpl_pickup_time", dtime(8, 0))),
+        return_time=_serialize_time(context.user_data.get("tpl_return_time")),
         vehicle_type=context.user_data.get("tpl_vehicle_type", "Sitz"),
     )
 

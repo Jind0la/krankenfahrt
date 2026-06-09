@@ -684,11 +684,9 @@ async def test_vorlage_new_conversation_persists_template():
         assert tpl.pickup_addr == "Home, Musterstraße 1"
         assert tpl.dest_addr == "Dialyse Zentrum"
         assert tpl.cron_days == "Mo,Mi,Fr"
-        # Tortoise may return tz-aware times on readback; compare normalized
-        pickup_t = tpl.pickup_time.replace(tzinfo=None) if tpl.pickup_time.tzinfo else tpl.pickup_time
-        return_t = tpl.return_time.replace(tzinfo=None) if tpl.return_time.tzinfo else tpl.return_time
-        assert pickup_t == time(8, 30)
-        assert return_t == time(12, 0)
+        # pickup_time is stored as "HH:MM" or "HH:MM:SS" string (CharField)
+        assert tpl.pickup_time in ("08:30", "08:30:00")
+        assert tpl.return_time in ("12:00", "12:00:00")
         assert tpl.vehicle_type == "Liege"
 
     finally:
