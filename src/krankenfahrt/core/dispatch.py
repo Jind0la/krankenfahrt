@@ -268,13 +268,12 @@ class GreedyDispatchEngine:
         trip: Trip,
         violations: list[ConstraintViolation],
     ) -> None:
+        # P-Schein is a soft warning, not a hard gate during pilot.
+        # Many small operators have mixed fleets and drivers without formal P-Schein.
         if await self._needs_p_schein(trip) and not driver.p_schein:
-            violations.append(
-                ConstraintViolation(
-                    ConstraintKind.NO_P_SCHEIN,
-                    driver.id,
-                    f"Trip requires Personenbeförderungsschein but driver does not have one",
-                )
+            logger.info(
+                "P-Schein recommended for driver %d on trip %d (vehicle_type=%s)",
+                driver.id, trip.id, (await trip.patient).vehicle_type,
             )
 
     async def _check_work_time(
@@ -425,4 +424,6 @@ class GreedyDispatchEngine:
 
     async def _needs_p_schein(self, trip: Trip) -> bool:
         patient = await trip.patient
+        # Only Liege (stretcher) and KTW (ambulance) transport legally require
+        # Personenbeförderungsschein. Sitz (seated) and Rad (wheelchair) do not.
         return patient.vehicle_type in ("Liege", "KTW")
