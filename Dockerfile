@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir -e ".[voice]" && \
 # Create data and model cache directories
 RUN mkdir -p /app/data /cache/models
 
-ENV DATABASE_URL=sqlite:///app/data/krankenfahrt.db
+ENV DATABASE_URL=sqlite:///cache/krankenfahrt.db
 ENV WHISPER_CACHE_DIR=/cache/models
 ENV WHISPER_MODEL=small
 ENV WHISPER_DEVICE=cpu
