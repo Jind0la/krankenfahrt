@@ -749,40 +749,17 @@ async def _get_active_trip_for_driver(driver: Driver) -> Trip | None:
 # ── Natural language handler (text) ────────────────────────────────────
 
 async def handle_natural_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle natural language text messages: classify intent via NLU, route."""
+    """Handle natural language text messages: generate conversational response via LLM."""
     text = update.message.text.strip()
     if not text:
         return
+    telegram_id = update.effective_user.id if update.effective_user else 0
 
-    from krankenfahrt.services.nlu import classify_driver
+    from krankenfahrt.services.response_gen import generate_driver_response
 
-    intent = await classify_driver(text)
-    logger.info("Driver NLU: %s → intent=%s (%.2f)", text[:60], intent.intent, intent.confidence)
-
-    if intent.intent == "heute":
-        await cmd_heute(update, context)
-    elif intent.intent == "pause":
-        await cmd_pause(update, context)
-    elif intent.intent == "status":
-        # Route to voice handler's status logic (reuse the pipeline)
-        await update.message.reply_text(
-            "📋 Für Status-Updates nutze bitte die Buttons unter deiner aktiven Fahrt, "
-            "oder schick eine Sprachnachricht („Bin angekommen\", „Patient an Bord\" etc.)."
-        )
-    elif intent.intent == "problem":
-        await update.message.reply_text(
-            "⚠️ *Problem melden* — bitte beschreibe das Problem kurz.\n"
-            "Ich informiere dann den Disponenten.",
-            parse_mode="Markdown",
-        )
-    elif intent.intent == "info":
-        # Show actual upcoming trips, not generic help
-        await cmd_heute(update, context)
-    else:
-        await update.message.reply_text(
-            "❓ Sag einfach was du brauchst — \"Was hab ich heute?\", "
-            "\"Ich mach Pause\", oder sprich eine Sprachnachricht."
-        )
+    logger.info("Driver NLU: %s", text[:60])
+    response = await generate_driver_response(text, telegram_id)
+    await update.message.reply_text(response)
 
 
 # ── Handler registration ──────────────────────────────────────────────

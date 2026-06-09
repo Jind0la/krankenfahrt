@@ -1338,47 +1338,16 @@ async def cmd_assign_callback(
 
 
 async def handle_natural_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle natural language messages: classify intent via NLU, route to handler."""
+    """Handle natural language messages: generate conversational response via LLM."""
     text = update.message.text.strip()
     if not text:
         return
 
-    from krankenfahrt.services.nlu import classify_chef
+    from krankenfahrt.services.response_gen import generate_chef_response
 
-    intent = await classify_chef(text)
-    logger.info("Chef NLU: %s → intent=%s (%.2f)", text[:60], intent.intent, intent.confidence)
-
-    if intent.intent == "dashboard":
-        await cmd_dashboard(update, context)
-    elif intent.intent == "driver_list":
-        await _handle_driver_list(update, context)
-    elif intent.intent == "export":
-        await cmd_export(update, context)
-    elif intent.intent == "escalate":
-        await _handle_escalation_list(update, context)
-    elif intent.intent == "driver_add":
-        # Extract name/phone from text using LLM or fall back to /fahrer add hint
-        await update.message.reply_text(
-            "📋 *Fahrer anlegen* — nutze dafür bitte:\n"
-            "`/fahrer add <Vorname> <Nachname> <Telefon> [Telegram-ID]`\n\n"
-            "Beispiel: `/fahrer add Max Mustermann 017612345678`",
-            parse_mode="Markdown",
-        )
-    elif intent.intent == "assign_trip":
-        # Guide user to dashboard for assignment
-        await update.message.reply_text(
-            "🔀 *Fahrt zuweisen* — schau dir das Dashboard an:\n"
-            "`/dashboard` zeigt alle Fahrten mit Zuweisen-Buttons.",
-            parse_mode="Markdown",
-        )
-    elif intent.intent == "info":
-        # Show dashboard — most useful default for "what's going on"
-        await cmd_dashboard(update, context)
-    else:
-        await update.message.reply_text(
-            "❓ Das habe ich nicht verstanden. Sag einfach was du tun möchtest — "
-            "z.B. \"Dashboard\", \"Fahrerliste\", \"Export\" — oder nutze /start für Hilfe."
-        )
+    logger.info("Chef NLU: %s", text[:60])
+    response = await generate_chef_response(text)
+    await update.message.reply_text(response, parse_mode="Markdown")
 
 
 # =============================================================================
