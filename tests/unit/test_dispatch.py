@@ -674,7 +674,10 @@ class TestFindBestDriver:
         )
         defaults.update(kwargs)
         driver = Mock(**defaults)
-        driver.vehicle = Mock(vehicle_type="Sitz")
+        # vehicle FK is awaitable in Tortoise — create a fresh coroutine per driver
+        async def _vehicle():
+            return None
+        driver.vehicle = _vehicle()  # coroutine object, awaitable once
         return driver
 
     @pytest.mark.asyncio
@@ -739,7 +742,10 @@ class TestFindBestDriver:
         driver1 = self.make_driver(1, active=False)  # inactive
         driver2 = self.make_driver(2, work_days="Mo,Di")  # wrong day + overlap
         driver3 = self.make_driver(3, p_schein=False)
-        driver3.vehicle = Mock(vehicle_type="Sitz")  # vehicle matches…
+        # Override vehicle: wrap in coroutine so await driver3.vehicle works
+        async def _v():
+            return Mock(vehicle_type="Sitz")
+        driver3.vehicle = _v()  # vehicle matches…
 
         # …but the overlap mock returns a conflict for any driver
         existing = Mock(
