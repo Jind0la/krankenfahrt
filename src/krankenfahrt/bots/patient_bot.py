@@ -1035,21 +1035,28 @@ async def _try_auto_dispatch(trip, update: Update) -> None:
         assignment = await engine.find_best_driver(trip, drivers)
     except DispatchError as e:
         logger.warning("Auto-dispatch failed for trip %d: %s", trip.id, e)
-        # Notify chef about unassigned trip
+        # Notify chef about unassigned trip — must use chef bot token
         try:
+            import httpx as _httpx
             from krankenfahrt.config import config as _cfg
-            for admin_id in _cfg.ADMIN_TELEGRAM_IDS:
-                await update.get_bot().send_message(
-                    chat_id=admin_id,
-                    text=(
-                        f"⚠️ *Auto-Dispatch fehlgeschlagen*\\n\\n"
-                        f"Fahrt #{trip.id}: {trip.pickup_addr} → {trip.dest_addr}\\n"
-                        f"🕐 {trip.scheduled_pickup.strftime('%d.%m.%Y %H:%M')}\\n\\n"
-                        f"Grund: {e}\\n\\n"
-                        f"Bitte manuell über /dashboard zuweisen."
-                    ),
-                    parse_mode=ParseMode.MARKDOWN,
-                )
+            chef_token = _cfg.CHEF_BOT_TOKEN
+            async with _httpx.AsyncClient() as _client:
+                for admin_id in _cfg.ADMIN_TELEGRAM_IDS:
+                    await _client.post(
+                        f"https://api.telegram.org/bot{chef_token}/sendMessage",
+                        json={
+                            "chat_id": admin_id,
+                            "text": (
+                                f"⚠️ *Auto-Dispatch fehlgeschlagen*\n\n"
+                                f"Fahrt #{trip.id}: {trip.pickup_addr} → {trip.dest_addr}\n"
+                                f"🕐 {trip.scheduled_pickup.strftime('%d.%m.%Y %H:%M')}\n\n"
+                                f"Grund: {e}\n\n"
+                                f"Bitte manuell über /dashboard zuweisen."
+                            ),
+                            "parse_mode": "Markdown",
+                        },
+                        timeout=10,
+                    )
         except Exception:
             logger.warning("Failed to notify chef about dispatch failure")
         return
@@ -1067,19 +1074,27 @@ async def _try_auto_dispatch(trip, update: Update) -> None:
         message=f"Auto-assigned to {assignment.driver.name} (score={assignment.score:.2f})",
     )
 
-    # Notify driver
+    # Notify driver — must use driver bot token (patient bot can't message drivers)
     try:
-        await update.get_bot().send_message(
-            chat_id=assignment.driver.telegram_id,
-            text=(
-                f"📋 *Neue Fahrt zugewiesen!*\\n\\n"
-                f"👤 {trip.patient.name if await trip.patient else '?'}\\n"
-                f"📍 {trip.pickup_addr} → {trip.dest_addr}\\n"
-                f"🕐 {trip.scheduled_pickup.strftime('%d.%m.%Y %H:%M')}\\n\\n"
-                f"Nutze /heute für deine Fahrten."
-            ),
-            parse_mode=ParseMode.MARKDOWN,
-        )
+        import httpx
+        driver_token = config.DRIVER_BOT_TOKEN
+        patient_name = (await trip.patient).name if trip.patient else "?"
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"https://api.telegram.org/bot{driver_token}/sendMessage",
+                json={
+                    "chat_id": assignment.driver.telegram_id,
+                    "text": (
+                        f"📋 *Neue Fahrt zugewiesen!*\n\n"
+                        f"👤 {patient_name}\n"
+                        f"📍 {trip.pickup_addr} → {trip.dest_addr}\n"
+                        f"🕐 {trip.scheduled_pickup.strftime('%d.%m.%Y %H:%M')}\n\n"
+                        f"Nutze /heute für deine Fahrten."
+                    ),
+                    "parse_mode": "Markdown",
+                },
+                timeout=10,
+            )
     except Exception:
         logger.warning("Failed to notify driver %d", assignment.driver.telegram_id)
 
