@@ -190,6 +190,42 @@
     width: 280px;
   }
 
+  .comment-row {
+    margin-left: 2.5rem;
+    margin-top: 0.25rem;
+    margin-bottom: 0.35rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .comment-row input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-family: inherit;
+    transition: border-color 0.2s;
+  }
+  .comment-row input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .comment-row input::placeholder {
+    color: #3a3f47;
+  }
+  .comment-badge {
+    font-size: 0.65rem;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .comment-row.has-text input {
+    border-color: #1f6feb55;
+  }
+
   footer {
     margin-top: 3rem;
     text-align: center;
@@ -680,15 +716,54 @@
 </div>
 
 <footer>
-  Krankenfahrt Pilot-Testplan · v1.0 · 9. Juni 2026 · Alle Haken in localStorage gespeichert
+  Krankenfahrt Pilot-Testplan · v2.0 · 11. Juni 2026 · Checkboxen + Kommentare in localStorage
 </footer>
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────
 const CATS = ['patient','driver','chef','e2e','voice'];
-const TOTAL_TESTS = document.querySelectorAll('input[type=checkbox][data-cat]').length;
+const COMMENT_KEY = 'krankenfahrt-testplan-comments';
 
-// ── Persistence ────────────────────────────────────────────────────────
+// ── Comment injection (run before load) ─────────────────────────────────
+function injectCommentFields() {
+  document.querySelectorAll('.test-item').forEach(item => {
+    const cb = item.querySelector('input[type=checkbox]');
+    if (!cb || !cb.id) return;
+    // Don't double-inject
+    if (item.querySelector('.comment-row')) return;
+
+    const row = document.createElement('div');
+    row.className = 'comment-row';
+    row.innerHTML = '<span class="comment-badge">💬</span>' +
+      '<input type="text" data-comment="' + cb.id + '" placeholder="Kommentar zu ' + cb.id + '..." oninput="saveComments()">';
+    item.appendChild(row);
+  });
+}
+
+// ── Comment persistence ──────────────────────────────────────────────────
+function saveComments() {
+  const comments = {};
+  document.querySelectorAll('.comment-row input[data-comment]').forEach(inp => {
+    const v = inp.value.trim();
+    if (v) comments[inp.dataset.comment] = v;
+    // toggle visual indicator
+    inp.parentElement.classList.toggle('has-text', v.length > 0);
+  });
+  localStorage.setItem(COMMENT_KEY, JSON.stringify(comments));
+}
+
+function loadComments() {
+  const raw = localStorage.getItem(COMMENT_KEY);
+  if (!raw) return;
+  const comments = JSON.parse(raw);
+  document.querySelectorAll('.comment-row input[data-comment]').forEach(inp => {
+    const v = comments[inp.dataset.comment] || '';
+    inp.value = v;
+    inp.parentElement.classList.toggle('has-text', v.length > 0);
+  });
+}
+
+// ── Checkbox persistence ─────────────────────────────────────────────────
 function save() {
   const state = {};
   document.querySelectorAll('input[type=checkbox][data-cat]').forEach(cb => {
@@ -720,6 +795,7 @@ function loadNotes() {
 
 // ── Progress ───────────────────────────────────────────────────────────
 function updateProgress() {
+  const TOTAL_TESTS = document.querySelectorAll('input[type=checkbox][data-cat]').length;
   let done = 0;
   const catCounts = {};
   CATS.forEach(c => catCounts[c] = { done: 0, total: 0 });
@@ -741,9 +817,15 @@ function updateProgress() {
 
 // ── Actions ────────────────────────────────────────────────────────────
 function resetAll() {
-  if (!confirm('Alle Test-Haken wirklich zurücksetzen?')) return;
+  if (!confirm('Alle Haken UND Kommentare wirklich zurücksetzen?')) return;
   document.querySelectorAll('input[type=checkbox][data-cat]').forEach(cb => cb.checked = false);
   save();
+  // Clear all comment inputs + storage
+  document.querySelectorAll('.comment-row input[data-comment]').forEach(inp => {
+    inp.value = '';
+    inp.parentElement.classList.remove('has-text');
+  });
+  localStorage.removeItem(COMMENT_KEY);
 }
 
 function expandAll() {
@@ -760,7 +842,9 @@ function toggleCat(header) {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────
+injectCommentFields();
 load();
+loadComments();
 loadNotes();
 updateProgress();
 </script>
