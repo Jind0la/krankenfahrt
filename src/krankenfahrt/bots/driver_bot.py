@@ -174,8 +174,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
     except DoesNotExist:
         await update.message.reply_text(
-            "❌ Du bist nicht als Fahrer registriert.\n"
-            "Bitte kontaktiere deinen Disponenten."
+            f"❌ Du bist nicht als Fahrer registriert.\n"
+            f"Deine Telegram-ID: `{telegram_id}`\n\n"
+            f"Bitte gib diese ID deinem Disponenten. "
+            f"Er kann dich mit `/fahrer add <Name> <Telefon> {telegram_id}` registrieren."
         )
 
 

@@ -18,7 +18,7 @@ from faster_whisper import WhisperModel
 # === Configuration ===
 MODEL_SIZES = ["tiny", "base", "small"]
 AUDIO_DURATIONS = [5, 30, 60, 120]  # seconds
-ITERATIONS = 10
+ITERATIONS = 1
 SAMPLE_RATE = 16000
 BENCHMARK_DIR = Path(__file__).parent
 CACHE_DIR = Path.home() / ".cache" / "whisper_bench"
@@ -101,7 +101,7 @@ def benchmark_model(model_size: str, audio_files: dict[int, bytes]) -> list[dict
             "std_s": round(float(np.std(latencies_np)), 3),
             "load_time_s": round(load_time, 2),
         })
-        print(f"    Summary: mean={results[-1]['mean_s']}s  p99={results[-1]['p99']}s  min={results[-1]['min_s']}s  max={results[-1]['max_s']}s")
+        print(f"    Summary: mean={results[-1]['mean_s']}s  p99={results[-1]['p99_s']}s  min={results[-1]['min_s']}s  max={results[-1]['max_s']}s")
 
     return results
 

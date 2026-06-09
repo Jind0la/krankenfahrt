@@ -214,16 +214,33 @@ async def main() -> None:
     driver_bot = await build_driver_bot()
     chef_bot = await build_chef_bot()
 
+    # Register global error handler on all bots
+    async def _error_handler(update, context):
+        logger.error("Unhandled error", exc_info=context.error)
+        if update and update.effective_message:
+            await update.effective_message.reply_text(
+                "⚠️ Interner Fehler. Bitte versuche es erneut oder kontaktiere den Support."
+            )
+
+    patient_bot.add_error_handler(_error_handler)
+    driver_bot.add_error_handler(_error_handler)
+    chef_bot.add_error_handler(_error_handler)
+
     # Initialize + start all three
     await patient_bot.initialize()
     await driver_bot.initialize()
     await chef_bot.initialize()
 
+    # Start polling — Application.start() does NOT fetch updates!
+    await patient_bot.updater.start_polling()
+    await driver_bot.updater.start_polling()
+    await chef_bot.updater.start_polling()
+
     await patient_bot.start()
     await driver_bot.start()
     await chef_bot.start()
 
-    logger.info("All three bots running")
+    logger.info("All three bots running (polling started)")
 
     # Start morning-push background loop
     morning_push_task = asyncio.create_task(run_morning_push_loop(driver_bot))

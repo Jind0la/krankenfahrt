@@ -5,6 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
+    "startCommand": "python -m krankenfahrt.main",
     "healthcheckPath": "/health",
     "restartPolicyType": "ALWAYS",
     "numReplicas": 1

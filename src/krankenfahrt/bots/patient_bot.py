@@ -165,17 +165,17 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             default_pickup_addr="(bitte ergänzen)",
         )
         await update.message.reply_text(
-            "🚑 *Willkommen bei Krankenfahrt!* 🇩🇪\n\n"
+            "🚑 *Willkommen bei Krankenfahrt!*\n\n"
             "Dein Profil wurde automatisch angelegt. Bitte ergänze deine Daten "
-            "mit `/profil_edit`, damit wir deine Fahrten optimal planen können.\n\n"
+            "mit /profil_edit, damit wir deine Fahrten optimal planen können.\n\n"
             "📋 *Verfügbare Befehle:*\n"
             "/profil — Profil anzeigen\n"
             "/profil_edit — Profil bearbeiten\n"
             "/vorlagen — Wiederkehrende Fahrten anzeigen\n"
             "/vorlage_neu — Neue Vorlage erstellen\n"
-            "/vorlage_show \\<ID\\> — Vorlage anzeigen\n"
-            "/vorlage_edit \\<ID\\> — Vorlage bearbeiten\n"
-            "/vorlage_del \\<ID\\> — Vorlage löschen",
+            "/vorlage_show <ID> — Vorlage anzeigen\n"
+            "/vorlage_edit <ID> — Vorlage bearbeiten\n"
+            "/vorlage_del <ID> — Vorlage löschen",
             parse_mode=ParseMode.MARKDOWN,
         )
         logger.info("New patient registered: telegram_id=%d, name=%s",
@@ -1157,7 +1157,7 @@ async def _handle_other_intent(update: Update, patient: Patient) -> None:
     """Redirect non-booking messages to helpful commands."""
     await update.message.reply_text(  # type: ignore[union-attr]
         "ℹ️ Ich bin dein Buchungsassistent für Krankentransporte.\n\n"
-        "📋 *Das kannst du tun:*\n"
+        "📋 Das kannst du tun:\n"
         "• Fahrten buchen: Einfach Nachricht schreiben!\n"
         "  z.B.: \"Morgen 8 Uhr zur Dialyse Klinikum Nord\"\n"
         "• /profil — Deine Daten anzeigen\n"
@@ -1165,7 +1165,6 @@ async def _handle_other_intent(update: Update, patient: Patient) -> None:
         "• /vorlagen — Wiederkehrende Fahrten\n"
         "• Fahrten abfragen: \"Habe ich morgen eine Fahrt?\"\n\n"
         f"📞 Bei dringenden Anliegen: {config.COMPANY_PHONE}",
-        parse_mode=ParseMode.MARKDOWN,
     )
 
 

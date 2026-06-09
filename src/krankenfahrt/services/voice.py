@@ -34,6 +34,15 @@ async def transcribe_voice(audio_bytes: bytes, model_size: str = "small") -> str
         )
         logger.info(f"Loaded Whisper model '{model_size or config.WHISPER_MODEL}' from {cache_dir}")
 
+        # Warmup: transcribe 1s of silence to eliminate JIT compilation penalty
+        try:
+            import numpy as np
+            warmup_audio = np.zeros(16000, dtype=np.float32)
+            _whisper_model.transcribe(warmup_audio, language="de", beam_size=3)
+            logger.info("Whisper model warmup complete")
+        except Exception:
+            logger.warning("Model warmup failed — first transcription may be slow", exc_info=True)
+
     # faster-whisper expects file path or numpy array
     # For bytes, we write to temp file
     import tempfile

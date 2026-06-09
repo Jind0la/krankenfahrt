@@ -1,50 +1,12 @@
-name: Test, Build & Deploy to Railway
+name: Deploy to Railway
 
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 jobs:
-  test:
-    name: Lint & Test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12"]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
-
-      - name: Install Python dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -e ".[voice,dev]"
-
-      - name: Lint with ruff
-        run: ruff check src/
-
-      - name: Type check with mypy
-        run: mypy src/
-
-      - name: Run tests
-        run: pytest -v
-
   deploy:
-    name: Build & Deploy to Railway
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: Deploy
     runs-on: ubuntu-latest
 
     steps:

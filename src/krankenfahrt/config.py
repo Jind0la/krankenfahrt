@@ -71,7 +71,7 @@ class Config:
 
     # Voice (Whisper)
     WHISPER_MODEL: str = field(
-        default_factory=lambda: os.environ.get("WHISPER_MODEL", "small")
+        default_factory=lambda: os.environ.get("WHISPER_MODEL", "tiny")
     )
     WHISPER_DEVICE: str = field(
         default_factory=lambda: os.environ.get("WHISPER_DEVICE", "cpu")
@@ -156,6 +156,29 @@ class Config:
     # Prometheus metrics server
     METRICS_PORT: int = field(
         default_factory=lambda: int(os.environ.get("METRICS_PORT", "9090"))
+    )
+
+    # ── Alerting ─────────────────────────────────────────────────
+    ALERTING_ENABLED: bool = field(
+        default_factory=lambda: os.environ.get("ALERTING_ENABLED", "0") == "1"
+    )
+    ALERTING_EVAL_INTERVAL: float = field(
+        default_factory=lambda: float(os.environ.get("ALERTING_EVAL_INTERVAL", "30.0"))
+    )
+    ALERTING_CHEF_CHAT_ID: int = field(
+        default_factory=lambda: int(os.environ.get("ALERTING_CHEF_CHAT_ID", "0"))
+    )
+    ALERTING_ERROR_RATE_THRESHOLD: float = field(
+        default_factory=lambda: float(os.environ.get("ALERTING_ERROR_RATE_THRESHOLD", "0.1"))
+    )
+    ALERTING_ERROR_RATE_DURATION: float = field(
+        default_factory=lambda: float(os.environ.get("ALERTING_ERROR_RATE_DURATION", "60.0"))
+    )
+    ALERTING_COOLDOWN: float = field(
+        default_factory=lambda: float(os.environ.get("ALERTING_COOLDOWN", "300.0"))
+    )
+    ALERTING_DEADMAN_MAX_AGE: float = field(
+        default_factory=lambda: float(os.environ.get("ALERTING_DEADMAN_MAX_AGE", "60.0"))
     )
 
 

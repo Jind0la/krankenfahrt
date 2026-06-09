@@ -139,6 +139,21 @@ dispatch_attempts_total = Counter(
     ["engine"],
 )
 
+# ── Heartbeat gauge (for deadman switch) ────────────────────
+heartbeat_timestamp = Gauge(
+    "krankenfahrt_heartbeat_timestamp_seconds",
+    "Monotonic timestamp of last application heartbeat",
+)
+
+
+def bump_heartbeat() -> None:
+    """Record a heartbeat — called periodically by the main loop.
+
+    Sets the heartbeat gauge to the current monotonic time so the
+    DeadmanSwitch in alerting.py can detect stale heartbeats.
+    """
+    heartbeat_timestamp.set(time.monotonic())
+
 
 @web.middleware
 async def metrics_middleware(

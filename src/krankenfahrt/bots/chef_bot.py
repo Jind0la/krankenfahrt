@@ -430,20 +430,26 @@ async def cmd_fahrer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 async def _handle_driver_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Create a new driver.
 
-    Usage: /fahrer add <Vorname> <Nachname> <Telefon>
+    Usage: /fahrer add <Vorname> <Nachname> <Telefon> [Telegram-ID]
     """
     args = context.args[1:]  # Skip "add"
 
     if len(args) < 3:
         await update.message.reply_text(
             "❌ *Unzureichende Argumente.*\n\n"
-            "Verwendung: `/fahrer add <Vorname> <Nachname> <Telefon>`\n\n"
-            "Beispiel: `/fahrer add Max Mustermann 017612345678`",
+            "Verwendung: `/fahrer add <Vorname> <Nachname> <Telefon> [Telegram-ID]`\n\n"
+            "Beispiel: `/fahrer add Max Mustermann 017612345678 123456789`\n"
+            "_(Die Telegram-ID ist optional. Ohne sie kann der Fahrer den Bot nicht nutzen.)_",
             parse_mode="Markdown",
         )
         return
 
-    # Build name from first N-1 args, last arg is phone
+    # Parse: last arg is phone, second-to-last (if numeric and 8+ digits) is telegram_id
+    # Only attempt telegram_id extraction when we have 4+ args (name parts + phone + optional id)
+    telegram_id = 0
+    if len(args) >= 4 and args[-1].isdigit() and len(args[-1]) >= 8:
+        telegram_id = int(args[-1])
+        args = args[:-1]  # Remove telegram_id from args
     *name_parts, phone = args
     name = " ".join(name_parts)
 
@@ -460,7 +466,7 @@ async def _handle_driver_add(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         driver = await db_retry(
             lambda: Driver.create(
-                telegram_id=0,  # No Telegram account linked yet
+                telegram_id=telegram_id,
                 name=name,
                 phone=phone,
                 active=True,

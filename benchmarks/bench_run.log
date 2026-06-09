@@ -1,0 +1,125 @@
+============================================================
+faster-whisper LATENCY BENCHMARK
+Device: CPU (Apple Silicon M3)
+Iterations per config: 1
+Model sizes: ['tiny', 'base', 'small']
+Audio durations: [5, 30, 60, 120]s
+============================================================
+
+Generating synthetic test audio...
+  5s: 160044 bytes
+  30s: 960044 bytes
+  60s: 1920044 bytes
+  120s: 3840044 bytes
+
+============================================================
+Loading model: tiny
+============================================================
+Model load time: 1.27s
+
+  Duration: 5s
+    Run  1/1: 60.893s  (detected: de, 5.0s)
+    Summary: mean=60.893s  p99=60.893s  min=60.893s  max=60.893s
+
+  Duration: 30s
+    Run  1/1: 22.481s  (detected: de, 30.0s)
+    Summary: mean=22.481s  p99=22.481s  min=22.481s  max=22.481s
+
+  Duration: 60s
+    Run  1/1: 30.944s  (detected: de, 60.0s)
+    Summary: mean=30.944s  p99=30.944s  min=30.944s  max=30.944s
+
+  Duration: 120s
+    Run  1/1: 163.217s  (detected: de, 120.0s)
+    Summary: mean=163.217s  p99=163.217s  min=163.217s  max=163.217s
+
+============================================================
+Loading model: base
+============================================================
+Model load time: 0.73s
+
+  Duration: 5s
+    Run  1/1: 70.454s  (detected: de, 5.0s)
+    Summary: mean=70.454s  p99=70.454s  min=70.454s  max=70.454s
+
+  Duration: 30s
+    Run  1/1: 39.030s  (detected: de, 30.0s)
+    Summary: mean=39.03s  p99=39.03s  min=39.03s  max=39.03s
+
+  Duration: 60s
+    Run  1/1: 163.424s  (detected: de, 60.0s)
+    Summary: mean=163.424s  p99=163.424s  min=163.424s  max=163.424s
+
+  Duration: 120s
+    Run  1/1: 131.083s  (detected: de, 120.0s)
+    Summary: mean=131.083s  p99=131.083s  min=131.083s  max=131.083s
+
+============================================================
+Loading model: small
+============================================================
+Model load time: 66.94s
+
+  Duration: 5s
+    Run  1/1: 13.217s  (detected: de, 5.0s)
+    Summary: mean=13.217s  p99=13.217s  min=13.217s  max=13.217s
+
+  Duration: 30s
+    Run  1/1: 37.218s  (detected: de, 30.0s)
+    Summary: mean=37.218s  p99=37.218s  min=37.218s  max=37.218s
+
+  Duration: 60s
+    Run  1/1: 47.935s  (detected: de, 60.0s)
+    Summary: mean=47.935s  p99=47.935s  min=47.935s  max=47.935s
+
+  Duration: 120s
+    Run  1/1: 123.231s  (detected: de, 120.0s)
+    Summary: mean=123.231s  p99=123.231s  min=123.231s  max=123.231s
+
+
+------------------------------------------------------------------------------------------
+Model    Dur(s)  Mean(s)    P99(s)     Median(s)  Min(s)     Max(s)     Load(s)   
+------------------------------------------------------------------------------------------
+tiny     5       60.893     60.893     60.893     60.893     60.893     1.27      
+tiny     30      22.481     22.481     22.481     22.481     22.481     1.27      
+tiny     60      30.944     30.944     30.944     30.944     30.944     1.27      
+tiny     120     163.217    163.217    163.217    163.217    163.217    1.27      
+base     5       70.454     70.454     70.454     70.454     70.454     0.73      
+base     30      39.03      39.03      39.03      39.03      39.03      0.73      
+base     60      163.424    163.424    163.424    163.424    163.424    0.73      
+base     120     131.083    131.083    131.083    131.083    131.083    0.73      
+small    5       13.217     13.217     13.217     13.217     13.217     66.94     
+small    30      37.218     37.218     37.218     37.218     37.218     66.94     
+small    60      47.935     47.935     47.935     47.935     47.935     66.94     
+small    120     123.231    123.231    123.231    123.231    123.231    66.94     
+------------------------------------------------------------------------------------------
+
+## Bottleneck Analysis
+
+### Model Load Time (cold start overhead)
+  - tiny: 1.3s to load
+  - base: 0.7s to load
+  - small: 66.9s to load
+
+### Real-Time Factor (RTF — lower is better, <1.0 = faster than real-time)
+  - tiny @ 5s: RTF=12.18 ✗
+  - tiny @ 30s: RTF=0.75 ✓
+  - tiny @ 60s: RTF=0.52 ✓
+  - tiny @ 120s: RTF=1.36 ✗
+  - base @ 5s: RTF=14.09 ✗
+  - base @ 30s: RTF=1.30 ✗
+  - base @ 60s: RTF=2.72 ✗
+  - base @ 120s: RTF=1.09 ✗
+  - small @ 5s: RTF=2.64 ✗
+  - small @ 30s: RTF=1.24 ✗
+  - small @ 60s: RTF=0.80 ✓
+  - small @ 120s: RTF=1.03 ✗
+
+### Slowest Configuration
+  - Model: base, Duration: 60s, Mean: 163.424s
+
+### Scalability
+  - tiny: 120s/5s mean ratio = 2.68x (linear would be 24x)
+  - base: 120s/5s mean ratio = 1.86x (linear would be 24x)
+  - small: 120s/5s mean ratio = 9.32x (linear would be 24x)
+
+Results saved to: /Users/nimarfranklinmac/Dev/krankenfahrt/benchmarks/whisper_bench_results.json

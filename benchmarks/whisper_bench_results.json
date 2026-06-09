@@ -1,0 +1,163 @@
+{
+  "benchmark": "faster-whisper latency",
+  "device": "CPU (Apple Silicon M3)",
+  "iterations": 1,
+  "sample_rate": 16000,
+  "models_tested": [
+    "tiny",
+    "base",
+    "small"
+  ],
+  "durations_tested_s": [
+    5,
+    30,
+    60,
+    120
+  ],
+  "results": [
+    {
+      "model": "tiny",
+      "duration_s": 5,
+      "iterations": 1,
+      "mean_s": 60.893,
+      "median_s": 60.893,
+      "p99_s": 60.893,
+      "min_s": 60.893,
+      "max_s": 60.893,
+      "std_s": 0.0,
+      "load_time_s": 1.27
+    },
+    {
+      "model": "tiny",
+      "duration_s": 30,
+      "iterations": 1,
+      "mean_s": 22.481,
+      "median_s": 22.481,
+      "p99_s": 22.481,
+      "min_s": 22.481,
+      "max_s": 22.481,
+      "std_s": 0.0,
+      "load_time_s": 1.27
+    },
+    {
+      "model": "tiny",
+      "duration_s": 60,
+      "iterations": 1,
+      "mean_s": 30.944,
+      "median_s": 30.944,
+      "p99_s": 30.944,
+      "min_s": 30.944,
+      "max_s": 30.944,
+      "std_s": 0.0,
+      "load_time_s": 1.27
+    },
+    {
+      "model": "tiny",
+      "duration_s": 120,
+      "iterations": 1,
+      "mean_s": 163.217,
+      "median_s": 163.217,
+      "p99_s": 163.217,
+      "min_s": 163.217,
+      "max_s": 163.217,
+      "std_s": 0.0,
+      "load_time_s": 1.27
+    },
+    {
+      "model": "base",
+      "duration_s": 5,
+      "iterations": 1,
+      "mean_s": 70.454,
+      "median_s": 70.454,
+      "p99_s": 70.454,
+      "min_s": 70.454,
+      "max_s": 70.454,
+      "std_s": 0.0,
+      "load_time_s": 0.73
+    },
+    {
+      "model": "base",
+      "duration_s": 30,
+      "iterations": 1,
+      "mean_s": 39.03,
+      "median_s": 39.03,
+      "p99_s": 39.03,
+      "min_s": 39.03,
+      "max_s": 39.03,
+      "std_s": 0.0,
+      "load_time_s": 0.73
+    },
+    {
+      "model": "base",
+      "duration_s": 60,
+      "iterations": 1,
+      "mean_s": 163.424,
+      "median_s": 163.424,
+      "p99_s": 163.424,
+      "min_s": 163.424,
+      "max_s": 163.424,
+      "std_s": 0.0,
+      "load_time_s": 0.73
+    },
+    {
+      "model": "base",
+      "duration_s": 120,
+      "iterations": 1,
+      "mean_s": 131.083,
+      "median_s": 131.083,
+      "p99_s": 131.083,
+      "min_s": 131.083,
+      "max_s": 131.083,
+      "std_s": 0.0,
+      "load_time_s": 0.73
+    },
+    {
+      "model": "small",
+      "duration_s": 5,
+      "iterations": 1,
+      "mean_s": 13.217,
+      "median_s": 13.217,
+      "p99_s": 13.217,
+      "min_s": 13.217,
+      "max_s": 13.217,
+      "std_s": 0.0,
+      "load_time_s": 66.94
+    },
+    {
+      "model": "small",
+      "duration_s": 30,
+      "iterations": 1,
+      "mean_s": 37.218,
+      "median_s": 37.218,
+      "p99_s": 37.218,
+      "min_s": 37.218,
+      "max_s": 37.218,
+      "std_s": 0.0,
+      "load_time_s": 66.94
+    },
+    {
+      "model": "small",
+      "duration_s": 60,
+      "iterations": 1,
+      "mean_s": 47.935,
+      "median_s": 47.935,
+      "p99_s": 47.935,
+      "min_s": 47.935,
+      "max_s": 47.935,
+      "std_s": 0.0,
+      "load_time_s": 66.94
+    },
+    {
+      "model": "small",
+      "duration_s": 120,
+      "iterations": 1,
+      "mean_s": 123.231,
+      "median_s": 123.231,
+      "p99_s": 123.231,
+      "min_s": 123.231,
+      "max_s": 123.231,
+      "std_s": 0.0,
+      "load_time_s": 66.94
+    }
+  ]
+}
