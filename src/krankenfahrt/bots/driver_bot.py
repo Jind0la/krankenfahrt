@@ -759,6 +759,7 @@ async def handle_natural_message(update: Update, context: ContextTypes.DEFAULT_T
 
     logger.info("Driver NLU: %s", text[:60])
     response = await generate_driver_response(text, telegram_id)
+    logger.info("Driver NLU response (%d chars): %s", len(response), response[:120])
     await update.message.reply_text(response)
 
 

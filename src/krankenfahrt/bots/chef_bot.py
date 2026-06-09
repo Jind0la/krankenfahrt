@@ -1347,6 +1347,7 @@ async def handle_natural_message(update: Update, context: ContextTypes.DEFAULT_T
 
     logger.info("Chef NLU: %s", text[:60])
     response = await generate_chef_response(text)
+    logger.info("Chef NLU response (%d chars): %s", len(response), response[:120])
     await update.message.reply_text(response, parse_mode="Markdown")
 
 
