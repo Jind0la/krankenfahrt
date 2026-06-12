@@ -12,8 +12,8 @@ Usage:
 """
 
 import asyncio
+import contextlib
 import time
-from typing import Optional
 
 import httpx
 import structlog
@@ -79,13 +79,13 @@ def _get_provider_config(provider: str) -> dict:
 async def call_with_fallback(
     messages: list[dict],
     *,
-    model: Optional[str] = None,
+    model: str | None = None,
     temperature: float = 0.0,
     max_tokens: int = 300,
-    primary_provider: Optional[str] = None,
-    fallback_provider: Optional[str] = None,
-    total_timeout: Optional[float] = None,
-    max_retries: Optional[int] = None,
+    primary_provider: str | None = None,
+    fallback_provider: str | None = None,
+    total_timeout: float | None = None,
+    max_retries: int | None = None,
     rate_limiter=None,  # optional TokenBucket
 ) -> dict:
     """Call LLM with automatic provider fallback.
@@ -132,7 +132,7 @@ async def call_with_fallback(
         providers.append(fallback)
 
     deadline = time.monotonic() + timeout
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
     total_attempts = 0
 
     for provider in providers:
@@ -233,10 +233,8 @@ async def call_with_fallback(
                         # If 429 with Retry-After header, honor it
                         retry_after = exc.response.headers.get("Retry-After")
                         if retry_after is not None:
-                            try:
+                            with contextlib.suppress(ValueError):
                                 backoff = float(retry_after)
-                            except ValueError:
-                                pass
                         logger.debug(
                             "llm_retry_backoff",
                             provider=provider,

@@ -22,18 +22,16 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
-from typing import Optional
 
 from aiohttp import web
 from prometheus_client import (
+    REGISTRY,
     Counter,
     Gauge,
     Histogram,
     generate_latest,
-    REGISTRY,
 )
 
 logger = logging.getLogger(__name__)
@@ -219,9 +217,9 @@ class MetricsServer:
     ) -> None:
         self.host = host
         self.port = port
-        self._app: Optional[web.Application] = None
-        self._runner: Optional[web.AppRunner] = None
-        self._site: Optional[web.TCPSite] = None
+        self._app: web.Application | None = None
+        self._runner: web.AppRunner | None = None
+        self._site: web.TCPSite | None = None
 
     async def _handle_metrics(self, request: web.Request) -> web.Response:
         """GET /metrics — Serve Prometheus text format."""

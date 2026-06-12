@@ -5,8 +5,6 @@ a conversational, context-aware response — not just structured dumps.
 """
 from __future__ import annotations
 
-import json
-
 import structlog
 
 from krankenfahrt.config import config
@@ -49,8 +47,9 @@ async def generate_driver_response(text: str, telegram_id: int) -> str:
     Fetches the driver's upcoming trips and asks DeepSeek to formulate
     a conversational German response.
     """
-    from krankenfahrt.models.schema import Driver, Trip
     from datetime import datetime as dt
+
+    from krankenfahrt.models.schema import Driver, Trip
 
     try:
         driver = await Driver.get(telegram_id=telegram_id)
@@ -116,8 +115,9 @@ async def generate_driver_response(text: str, telegram_id: int) -> str:
 
 async def generate_chef_response(text: str) -> str:
     """Generate a natural response for the chef/dispatcher's message."""
-    from krankenfahrt.models.schema import Driver, Trip
     from datetime import datetime as dt
+
+    from krankenfahrt.models.schema import Driver, Trip
 
     # Fetch today's trips
     now = dt.now()

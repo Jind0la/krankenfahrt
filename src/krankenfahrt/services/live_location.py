@@ -15,8 +15,7 @@ persisted to survive restarts; that's out of scope for the MVP.
 """
 
 import logging
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 from telegram import Bot
 from telegram.error import BadRequest, Forbidden, TelegramError
@@ -61,7 +60,7 @@ class LiveLocationTracker:
         lat: float,
         lon: float,
         live_period: int = DEFAULT_LIVE_PERIOD,
-    ) -> Optional[int]:
+    ) -> int | None:
         """Start live location sharing for a trip.
 
         Sends an initial location message with live_period set. Stores the
@@ -224,7 +223,7 @@ class LiveLocationTracker:
 
     # ── Query helpers ───────────────────────────────────────────────────────
 
-    def get_session(self, trip_id: int) -> Optional[LiveLocationSession]:
+    def get_session(self, trip_id: int) -> LiveLocationSession | None:
         """Return the live location session for a trip, if any."""
         return self._sessions.get(trip_id)
 

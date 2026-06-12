@@ -11,9 +11,6 @@ from krankenfahrt.config import config
 from krankenfahrt.health import HealthServer, make_db_health_check
 from krankenfahrt.logging_setup import setup_logging
 from krankenfahrt.metrics_server import MetricsServer, bump_heartbeat
-from krankenfahrt.models.schema import (
-    Driver, DriverBreak, Escalation, Patient, RecurringTrip, Trip, TripEvent, Vehicle,
-)
 from krankenfahrt.services.morning_push import run_morning_push_loop
 
 logger = structlog.get_logger(__name__)
@@ -29,10 +26,7 @@ def _make_telegram_notifier(chef_bot: Application):
     """
     async def send_alert(alert_name: str, message: str) -> None:
         # Determine target chat IDs
-        if config.ALERTING_CHEF_CHAT_ID != 0:
-            chat_ids = [config.ALERTING_CHEF_CHAT_ID]
-        else:
-            chat_ids = config.ADMIN_TELEGRAM_IDS
+        chat_ids = [config.ALERTING_CHEF_CHAT_ID] if config.ALERTING_CHEF_CHAT_ID != 0 else config.ADMIN_TELEGRAM_IDS
 
         if not chat_ids:
             logger.warning(

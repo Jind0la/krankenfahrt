@@ -11,11 +11,9 @@ Configuration (from environment):
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import math
 import os
-from typing import Optional
 
 import httpx
 
@@ -114,7 +112,7 @@ class OSRMClient:
             return await self._call_osrm_table(coordinates)
         except OSRMError as e:
             logger.warning("OSRM table request failed: %s, falling back to Haversine", e)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 "OSRM table request timed out after %.1fs, falling back to Haversine",
                 self.timeout,

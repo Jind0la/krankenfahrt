@@ -7,12 +7,11 @@ provider if configured.
 
 import json
 from dataclasses import dataclass
-from typing import Optional
 
 from krankenfahrt.resilience.llm_fallback import call_with_fallback
 from krankenfahrt.resilience.rate_limiter import get_global_limiter
 
-NLU_SYSTEM_PROMPT = """Du bist ein Agent für Krankentransport-Buchungen. 
+NLU_SYSTEM_PROMPT = """Du bist ein Agent für Krankentransport-Buchungen.
 Extrahiere aus Patientennachrichten strukturierte Buchungsdaten.
 Antworte AUSSCHLIESSLICH mit JSON.
 
@@ -39,7 +38,8 @@ FELDER (nur wenn relevant):
 
 BEISPIELE:
 "Morgen 8 Uhr zur Dialyse Klinikum Nord, Rückfahrt ca. 12:30"
-→ {{"action":"book","pickup_date":"MORGEN","pickup_time":"08:00","dest":"Klinikum Nord","return_time":"12:30","reason":"Dialyse","confidence":0.95}}
+→ {{\"action\":\"book\",\"pickup_date\":\"MORGEN\",\"pickup_time\":\"08:00\",\"dest\":\"Klinikum Nord\",
+→  \"return_time\":\"12:30\",\"reason\":\"Dialyse\",\"confidence\":0.95}}
 
 "Jeden Montag und Mittwoch 9:00 zur Physio, bin ca 45 Minuten da"
 → {{"action":"recurring","pickup_time":"09:00","dest":"Physio","days":["Mo","Mi"],"duration_min":45,"confidence":0.90}}
@@ -53,13 +53,13 @@ BEISPIELE:
 @dataclass
 class BookingIntent:
     action: str
-    pickup_date: Optional[str] = None
-    pickup_time: Optional[str] = None
-    return_time: Optional[str] = None
-    dest: Optional[str] = None
-    days: Optional[list[str]] = None
-    duration_min: Optional[int] = None
-    reason: Optional[str] = None
+    pickup_date: str | None = None
+    pickup_time: str | None = None
+    return_time: str | None = None
+    dest: str | None = None
+    days: list[str] | None = None
+    duration_min: int | None = None
+    reason: str | None = None
     confidence: float = 0.0
 
 

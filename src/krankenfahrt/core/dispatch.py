@@ -7,9 +7,8 @@ Phase 3: Advanced routing via krankenfahrt.routing module.
 
 import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from enum import Enum
-from typing import Optional
+from datetime import timedelta
+from enum import StrEnum
 
 import structlog
 
@@ -18,7 +17,7 @@ from krankenfahrt.models.schema import Driver, Trip
 logger = structlog.get_logger(__name__)
 
 # Lazy import to avoid ortools dependency for greedy-only users
-_ORToolsSolver: Optional[type] = None
+_ORToolsSolver: type | None = None
 
 
 def _get_ortools_solver():
@@ -34,7 +33,7 @@ def _get_ortools_solver():
 # Domain errors — descriptive, debuggable, production-ready
 # ---------------------------------------------------------------------------
 
-class ConstraintKind(str, Enum):
+class ConstraintKind(StrEnum):
     """Classification of constraint violations for logging and dashboards."""
     VEHICLE_TYPE_MISMATCH = "vehicle_type_mismatch"
     NO_P_SCHEIN = "no_p_schein"
@@ -46,7 +45,7 @@ class ConstraintKind(str, Enum):
     NO_DRIVERS_AVAILABLE = "no_drivers_available"
 
 
-class ConstraintViolation(Exception):
+class ConstraintError(Exception):
     """A single constraint that prevented a driver from being assigned.
 
     These are collected so the dispatch caller can surface every reason a
@@ -64,7 +63,7 @@ class ConstraintViolation(Exception):
 class DispatchError(Exception):
     """Top-level dispatch failure — raised when NO driver can be assigned."""
 
-    def __init__(self, trip_id: int, violations: list[ConstraintViolation]) -> None:
+    def __init__(self, trip_id: int, violations: list[ConstraintError]) -> None:
         self.trip_id = trip_id
         self.violations = violations
         summary = "; ".join(str(v) for v in violations)
@@ -91,7 +90,7 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
             f"({lat1}, {lon1}) → ({lat2}, {lon2})"
         )
 
-    R = 6371.0
+    earth_radius_km = 6371.0
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
     a = (
@@ -102,17 +101,17 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     )
     # Clamp for floating-point noise (e.g. sin² + cos² ≈ 1.0000000000000002)
     a = max(0.0, min(1.0, a))
-    return R * 2 * math.asin(math.sqrt(a))
+    return earth_radius_km * 2 * math.asin(math.sqrt(a))
 
 
-def _driver_position(driver: Driver) -> Optional[tuple[float, float]]:
+def _driver_position(driver: Driver) -> tuple[float, float] | None:
     """Extract (lat, lon) from a Driver record, or None if unknown."""
     if driver.location_lat is not None and driver.location_lon is not None:
         return (driver.location_lat, driver.location_lon)
     return None
 
 
-def _pickup_position(trip: Trip) -> Optional[tuple[float, float]]:
+def _pickup_position(trip: Trip) -> tuple[float, float] | None:
     """Extract (lat, lon) from the trip's driver_location fields.
 
     These fields double as the pickup coordinates in MVP (geocoding is Phase 2).
@@ -166,9 +165,9 @@ class OverlapCheckResult:
     If `overlaps` is False, the remaining fields are irrelevant.
     """
     overlaps: bool
-    conflicting_trip_id: Optional[int] = None
-    conflicting_time: Optional[str] = None  # human-readable
-    detail: Optional[str] = None
+    conflicting_trip_id: int | None = None
+    conflicting_time: str | None = None  # human-readable
+    detail: str | None = None
 
 
 class GreedyDispatchEngine:
@@ -193,11 +192,11 @@ class GreedyDispatchEngine:
         Raises:
             DispatchError — when no driver passes all constraints.
         """
-        violations: list[ConstraintViolation] = []
-        best: Optional[Assignment] = None
+        violations: list[ConstraintError] = []
+        best: Assignment | None = None
 
         for driver in available_drivers:
-            driver_violations: list[ConstraintViolation] = []
+            driver_violations: list[ConstraintError] = []
 
             # --- constraint gates ---
             await self._check_inactive(driver, driver_violations)
@@ -233,11 +232,11 @@ class GreedyDispatchEngine:
     # ── constraint checks — each appends to violations ─────────────────
 
     async def _check_inactive(
-        self, driver: Driver, violations: list[ConstraintViolation]
+        self, driver: Driver, violations: list[ConstraintError]
     ) -> None:
         if not driver.active:
             violations.append(
-                ConstraintViolation(
+                ConstraintError(
                     ConstraintKind.DRIVER_INACTIVE,
                     driver.id,
                     "Driver is deactivated (active=False)",
@@ -248,7 +247,7 @@ class GreedyDispatchEngine:
         self,
         driver: Driver,
         trip: Trip,
-        violations: list[ConstraintViolation],
+        violations: list[ConstraintError],
     ) -> None:
         # No vehicle assigned → skip check (don't block dispatch).
         # Many small operators don't track vehicles per driver; the trip
@@ -259,7 +258,7 @@ class GreedyDispatchEngine:
         required_type = await self._get_trip_vehicle_type(trip)
         if vehicle.vehicle_type != required_type:
             violations.append(
-                ConstraintViolation(
+                ConstraintError(
                     ConstraintKind.VEHICLE_TYPE_MISMATCH,
                     driver.id,
                     f"Vehicle type '{vehicle.vehicle_type}' != required '{required_type}'",
@@ -270,7 +269,7 @@ class GreedyDispatchEngine:
         self,
         driver: Driver,
         trip: Trip,
-        violations: list[ConstraintViolation],
+        violations: list[ConstraintError],
     ) -> None:
         # P-Schein is a soft warning, not a hard gate during pilot.
         # Many small operators have mixed fleets and drivers without formal P-Schein.
@@ -284,14 +283,14 @@ class GreedyDispatchEngine:
         self,
         driver: Driver,
         trip: Trip,
-        violations: list[ConstraintViolation],
+        violations: list[ConstraintError],
     ) -> None:
         pickup_time = trip.scheduled_pickup.time()
         if driver.work_hours_start is None or driver.work_hours_end is None:
             return  # no restriction configured
         if pickup_time < driver.work_hours_start or pickup_time > driver.work_hours_end:
             violations.append(
-                ConstraintViolation(
+                ConstraintError(
                     ConstraintKind.OUTSIDE_WORK_HOURS,
                     driver.id,
                     f"Pickup {pickup_time} outside work hours "
@@ -303,7 +302,7 @@ class GreedyDispatchEngine:
         self,
         driver: Driver,
         trip: Trip,
-        violations: list[ConstraintViolation],
+        violations: list[ConstraintError],
     ) -> None:
         # work_days is a comma-separated German 2-letter abbreviations: "Mo,Di,Mi"
         work_days_raw = driver.work_days or ""
@@ -313,7 +312,7 @@ class GreedyDispatchEngine:
         day_name = _WEEKDAY_TO_GERMAN[trip.scheduled_pickup.weekday()]
         if day_name not in allowed:
             violations.append(
-                ConstraintViolation(
+                ConstraintError(
                     ConstraintKind.WRONG_WORK_DAY,
                     driver.id,
                     f"Pickup day '{day_name}' not in driver work days: {allowed}",
@@ -324,12 +323,12 @@ class GreedyDispatchEngine:
         self,
         driver: Driver,
         trip: Trip,
-        violations: list[ConstraintViolation],
+        violations: list[ConstraintError],
     ) -> None:
         result = await self._detect_overlap(driver, trip)
         if result.overlaps:
             violations.append(
-                ConstraintViolation(
+                ConstraintError(
                     ConstraintKind.TRIP_OVERLAP,
                     driver.id,
                     result.detail or f"Conflicts with trip {result.conflicting_trip_id}",

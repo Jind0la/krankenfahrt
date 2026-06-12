@@ -10,7 +10,6 @@ classification.
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 import structlog
 
@@ -75,7 +74,7 @@ DRIVER_INTENT_EXAMPLES = """Beispiele:
 """
 
 # --- Keyword patterns for rule-based fallback ---
-_RULE_PATTERNS: list[tuple[str, Optional[str], list[str]]] = [
+_RULE_PATTERNS: list[tuple[str, str | None, list[str]]] = [
     # (action, trigger, [keyword patterns])
     ("stornieren", "stornieren", [
         r"\bstornier", r"\babsagen\b", r"\babsage\b", r"\bstorno\b",
@@ -131,8 +130,8 @@ class DriverIntent:
     """
 
     action: str = "unknown"
-    trigger: Optional[str] = None
-    trip_reference: Optional[str] = None
+    trigger: str | None = None
+    trip_reference: str | None = None
     confidence: float = 0.0
     params: dict = field(default_factory=dict)
 

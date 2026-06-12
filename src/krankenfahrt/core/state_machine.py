@@ -12,9 +12,10 @@ Architecture:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from transitions import Machine
 
@@ -127,7 +128,7 @@ TRIP_TRANSITIONS: list[dict[str, Any]] = [
 class StateChangeEvent:
     """Structured log entry for every state change."""
 
-    trip_id: Optional[int]
+    trip_id: int | None
     from_state: str
     to_state: str
     trigger: str
@@ -166,12 +167,12 @@ class TripStateMachine:
     def __init__(
         self,
         trip_model_instance: Any,
-        event_logger: Optional[EventLogger] = None,
+        event_logger: EventLogger | None = None,
     ):
         self.trip = trip_model_instance
         self._event_logger = event_logger
         # For problem_loesen: save the state we came from before entering 'problem'
-        self._pre_problem_state: Optional[str] = None
+        self._pre_problem_state: str | None = None
         # In-memory event log (always recorded; flushed to DB via event_logger)
         self._event_log: list[StateChangeEvent] = []
         # Track callback invocations for testing (internal)
@@ -205,7 +206,7 @@ class TripStateMachine:
         trigger: str,
         from_state: str,
         to_state: str,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Create and record a StateChangeEvent, then call the logger if set."""
         evt = StateChangeEvent(
@@ -213,7 +214,7 @@ class TripStateMachine:
             from_state=from_state,
             to_state=to_state,
             trigger=trigger,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             metadata=metadata or {},
         )
         self._event_log.append(evt)
@@ -227,7 +228,7 @@ class TripStateMachine:
                 "callback": callback_name,
                 "state": state,
                 "kind": "entry" if is_entry else "exit",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
         )
 
@@ -389,13 +390,11 @@ class TripStateMachine:
 
     def _guard_not_terminal(self, event: Any) -> bool:
         """Guard: no actions allowed on terminal states."""
-        if self.state in TERMINAL_STATES:
-            return False
-        return True
+        return self.state not in TERMINAL_STATES
 
     # ── custom: problem_loesen (returns to pre-problem state) ────────
 
-    def problem_loesen(self, metadata: Optional[dict[str, Any]] = None) -> None:
+    def problem_loesen(self, metadata: dict[str, Any] | None = None) -> None:
         """Resolve a problem and return to the state before the problem was reported.
 
         This is NOT a transitions trigger — it uses Machine.set_state() directly

@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 import structlog
 
@@ -110,7 +109,7 @@ _DRIVER_KEYWORDS = [
 ]
 
 
-def _keyword_match(text: str, patterns: list) -> Optional[str]:
+def _keyword_match(text: str, patterns: list) -> str | None:
     """Fast regex keyword matching. Returns first matching intent or None."""
     t = text.lower().strip()
     for intent, pats in patterns:

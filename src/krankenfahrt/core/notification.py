@@ -1,7 +1,6 @@
 """Notification service — sends messages to patients, drivers, chef."""
 
 from datetime import datetime
-from typing import Optional
 
 
 # German message templates

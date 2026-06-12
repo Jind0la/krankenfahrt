@@ -1,8 +1,7 @@
 """Tortoise ORM database models."""
 
-from datetime import time
 
-from tortoise import fields, Model
+from tortoise import Model, fields
 
 
 class Patient(Model):

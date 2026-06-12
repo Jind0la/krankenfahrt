@@ -48,10 +48,7 @@ def setup_logging() -> None:
     ]
 
     # --- Choose renderer based on LOG_FORMAT -------------------------------
-    if log_format == "console":
-        renderer = structlog.dev.ConsoleRenderer()
-    else:
-        renderer = structlog.processors.JSONRenderer()
+    renderer = structlog.dev.ConsoleRenderer() if log_format == "console" else structlog.processors.JSONRenderer()
 
     # --- Configure structlog (same factory for both paths) -------------------
     structlog.configure(
@@ -80,7 +77,7 @@ def setup_logging() -> None:
     root.addHandler(handler)
 
     # --- Silence noisy third-party loggers ----------------------------------
-    _NOISY_LOGGERS: tuple[str, ...] = (
+    _NOISY_LOGGERS: tuple[str, ...] = (  # noqa: N806
         "apscheduler",
         "asyncio",
         "faster_whisper",

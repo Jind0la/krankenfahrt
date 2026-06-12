@@ -15,10 +15,10 @@ Usage:
 from __future__ import annotations
 
 import io
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-from typing import Sequence
 
 import structlog
 
@@ -323,7 +323,7 @@ def _build_line_item_table(data: Muster4Data) -> Table:
     table = Table(rows, colWidths=COL_WIDTHS, repeatRows=1)
 
     # Calculate net total
-    net_total = sum(p.gesamtpreis_eur for p in data.positionen)
+    sum(p.gesamtpreis_eur for p in data.positionen)
 
     table.setStyle(
         TableStyle(
@@ -375,7 +375,7 @@ def _build_summary_block(data: Muster4Data) -> Table:
     ]
 
     # Width: right-align the block
-    total_width = 80 * mm
+    80 * mm
     label_w = 50 * mm
     amount_w = 30 * mm
 

@@ -24,12 +24,14 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
 
 from prometheus_client import REGISTRY
 
@@ -40,7 +42,7 @@ Notifier = Callable[[str, str], Awaitable[None]]
 # notifier(alert_name: str, message: str) -> None
 
 
-class Severity(str, Enum):
+class Severity(StrEnum):
     CRITICAL = "critical"
     WARNING = "warning"
     INFO = "info"
@@ -116,7 +118,7 @@ class ThresholdRule(AlertRule):
         threshold: float,
         operator: str = "gt",  # "gt" | "lt" | "gte" | "lte"
         duration_seconds: float = 60.0,
-        labels: Optional[dict[str, str]] = None,
+        labels: dict[str, str] | None = None,
         severity: Severity = Severity.WARNING,
         cooldown_seconds: float = 300.0,
     ) -> None:
@@ -129,7 +131,7 @@ class ThresholdRule(AlertRule):
 
         self._first_violation_at: float = 0.0  # monotonic
 
-    def _get_value(self) -> Optional[float]:
+    def _get_value(self) -> float | None:
         """Read the current value from the Prometheus registry."""
         try:
             # Collect all metrics matching this name
@@ -224,7 +226,7 @@ class RateRule(AlertRule):
         threshold_per_second: float,
         operator: str = "gt",
         duration_seconds: float = 60.0,
-        labels: Optional[dict[str, str]] = None,
+        labels: dict[str, str] | None = None,
         severity: Severity = Severity.WARNING,
         cooldown_seconds: float = 300.0,
     ) -> None:
@@ -236,10 +238,10 @@ class RateRule(AlertRule):
         self.labels = labels or {}
 
         self._first_violation_at: float = 0.0
-        self._previous_value: Optional[float] = None
+        self._previous_value: float | None = None
         self._previous_time: float = 0.0
 
-    def _get_value(self) -> Optional[float]:
+    def _get_value(self) -> float | None:
         try:
             for metric in REGISTRY.collect():
                 if metric.name == self.metric_name:
@@ -337,7 +339,7 @@ class DeadmanSwitch(AlertRule):
         self.metric_name = metric_name
         self.max_age_seconds = max_age_seconds
 
-    def _get_heartbeat_age(self) -> Optional[float]:
+    def _get_heartbeat_age(self) -> float | None:
         """Return seconds since last heartbeat, or None if not found."""
         try:
             for metric in REGISTRY.collect():
@@ -389,7 +391,7 @@ class AlertManager:
         self.notifier = notifier
         self.eval_interval = eval_interval
 
-        self._task: Optional[asyncio.Task[None]] = None
+        self._task: asyncio.Task[None] | None = None
         self._states: dict[str, AlertState] = {}
         self._running = False
 
@@ -416,10 +418,8 @@ class AlertManager:
         self._running = False
         if self._task is not None:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         logger.info("AlertManager stopped")
 

@@ -12,23 +12,19 @@ Usage:
     python -m krankenfahrt.routing.compare --trips 10 --vehicles 3 --runs 5
 """
 
-import asyncio
 import json
 import math
 import random
-import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import Optional
 
+from krankenfahrt.routing.greedy_solver import GreedyPDVRPTWSolver
 from krankenfahrt.routing.models import (
     RouteInput,
-    RouteOutput,
     RouteStop,
     VehicleSpec,
 )
 from krankenfahrt.routing.ortools_solver import OrtoolsPDVRPTWSolver
-from krankenfahrt.routing.greedy_solver import GreedyPDVRPTWSolver
 
 
 @dataclass
@@ -366,7 +362,7 @@ class ComparisonRunner:
 
     @staticmethod
     def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-        R = 6371.0
+        earth_radius_km = 6371.0
         dlat = math.radians(lat2 - lat1)
         dlon = math.radians(lon2 - lon1)
         a = (
@@ -375,7 +371,7 @@ class ComparisonRunner:
             * math.cos(math.radians(lat2))
             * math.sin(dlon / 2) ** 2
         )
-        return R * 2 * math.asin(math.sqrt(a))
+        return earth_radius_km * 2 * math.asin(math.sqrt(a))
 
 
 # --- CLI Entry Point ---

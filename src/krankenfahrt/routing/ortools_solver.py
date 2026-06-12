@@ -72,7 +72,6 @@ class OrtoolsPDVRPTWSolver:
 
         # --- Build distance matrix (depots + stops) ---
         num_depots = problem.num_depots
-        num_stops = problem.num_stops
 
         # Stops are indexed after depots in the matrix
         # depot 0..num_depots-1, then stops 0..num_stops-1
@@ -166,7 +165,7 @@ class OrtoolsPDVRPTWSolver:
         for i, stop in enumerate(problem.stops):
             trips.setdefault(stop.trip_id, []).append((i, stop))
 
-        for trip_id, stops in trips.items():
+        for _trip_id, stops in trips.items():
             pickup_idx = None
             delivery_idx = None
             for si, stop in stops:

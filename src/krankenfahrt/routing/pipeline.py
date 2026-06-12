@@ -11,13 +11,12 @@ Usage:
     python -m krankenfahrt.routing.pipeline --date 2024-06-15 --mode ortools
 """
 
-import asyncio
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Optional
 
+from krankenfahrt.routing.greedy_solver import GreedyPDVRPTWSolver
 from krankenfahrt.routing.models import (
     RouteInput,
     RouteOutput,
@@ -25,7 +24,6 @@ from krankenfahrt.routing.models import (
     VehicleSpec,
 )
 from krankenfahrt.routing.ortools_solver import OrtoolsPDVRPTWSolver
-from krankenfahrt.routing.greedy_solver import GreedyPDVRPTWSolver
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +45,7 @@ class PipelineConfig:
     depot_lon: float = 13.4050
     """Default depot coordinates (Berlin)."""
 
-    output_json_path: Optional[str] = None
+    output_json_path: str | None = None
     """If set, write RouteOutput JSON to this path."""
 
 
@@ -56,8 +54,8 @@ class PipelineResult:
     """Result of a pipeline run."""
 
     config: PipelineConfig
-    output: Optional[RouteOutput] = None
-    error: Optional[str] = None
+    output: RouteOutput | None = None
+    error: str | None = None
     runtime_sec: float = 0.0
     trips_loaded: int = 0
     vehicles_loaded: int = 0
@@ -162,8 +160,7 @@ class DailyPipeline:
 
             stops: list[RouteStop] = []
             for trip in trips:
-                patient = await trip.patient
-                vehicle_type = patient.vehicle_type if patient else "Sitz"
+                await trip.patient
 
                 # Parse pickup address to coordinates (simplified — use geo service in prod)
                 pickup_lat, pickup_lon = self._geocode(trip.pickup_addr)
@@ -201,7 +198,7 @@ class DailyPipeline:
 
             vehicles_specs: list[VehicleSpec] = []
             for v in vehicles_list:
-                driver_relation = await v.driver.first() if hasattr(v, 'driver') else None
+                await v.driver.first() if hasattr(v, 'driver') else None
                 vehicles_specs.append(
                     VehicleSpec(
                         vehicle_id=v.id,
@@ -223,7 +220,6 @@ class DailyPipeline:
         self,
     ) -> tuple[list[RouteStop], list[VehicleSpec]]:
         """Generate synthetic test data when DB is unavailable."""
-        import math
         import random
 
         target = self.config.target_date
@@ -310,7 +306,6 @@ class DailyPipeline:
         vehicles: list[VehicleSpec],
     ) -> list[list[float]]:
         """Build a full distance matrix: depots first, then stops."""
-        import math
 
         # Depot locations (one per vehicle, but all same depot for now)
         depot_coords: list[tuple[float, float]] = []
@@ -340,7 +335,7 @@ class DailyPipeline:
     def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         import math
 
-        R = 6371.0
+        earth_radius_km = 6371.0
         dlat = math.radians(lat2 - lat1)
         dlon = math.radians(lon2 - lon1)
         a = (
@@ -349,7 +344,7 @@ class DailyPipeline:
             * math.cos(math.radians(lat2))
             * math.sin(dlon / 2) ** 2
         )
-        return R * 2 * math.asin(math.sqrt(a))
+        return earth_radius_km * 2 * math.asin(math.sqrt(a))
 
     @staticmethod
     def _geocode(address: str) -> tuple[float, float]:

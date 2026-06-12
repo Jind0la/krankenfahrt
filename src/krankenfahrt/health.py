@@ -79,7 +79,7 @@ class HealthServer:
     ) -> None:
         try:
             request = await asyncio.wait_for(reader.read(1024), timeout=5.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             writer.close()
             await writer.wait_closed()
             return

@@ -6,11 +6,9 @@ Provides:
 - Audit log querying for compliance and troubleshooting
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import structlog
-from tortoise.expressions import Q
 
 from krankenfahrt.config import config
 from krankenfahrt.models.schema import Escalation, Trip
@@ -33,7 +31,7 @@ TRIGGER_REASONS = {"timeout", "manual", "system"}
 async def create_escalation(
     trip_id: int,
     trigger_reason: str,
-    trigger_detail: Optional[str] = None,
+    trigger_detail: str | None = None,
 ) -> Escalation:
     """Create a new escalation for a trip.
 
@@ -83,7 +81,7 @@ async def process_escalation_option(
     escalation_id: int,
     option: str,
     telegram_id: int,
-    resolution_note: Optional[str] = None,
+    resolution_note: str | None = None,
 ) -> Escalation:
     """Process an escalation option chosen by the chef.
 
@@ -112,7 +110,7 @@ async def process_escalation_option(
     if escalation.status == "resolved":
         raise ValueError(f"Escalation {escalation_id} is already resolved.")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Update escalation based on chosen option
     if option == "acknowledge":
@@ -172,7 +170,7 @@ async def get_open_escalations(limit: int = 20) -> list[Escalation]:
 
 
 async def get_escalation_log(
-    trip_id: Optional[int] = None,
+    trip_id: int | None = None,
     limit: int = 50,
 ) -> list[Escalation]:
     """Query the escalation audit log.
@@ -204,7 +202,7 @@ async def check_timeout_escalations() -> list[Escalation]:
         List of newly created Escalation instances.
     """
     timeout_minutes = config.ESCALATION_TIMEOUT_MINUTES
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
+    cutoff = datetime.now(UTC) - timedelta(minutes=timeout_minutes)
     active_states = [
         "zugewiesen", "anfahrt", "angekommen",
         "patient_an_bord", "unterwegs", "abgesetzt",
@@ -225,13 +223,9 @@ async def check_timeout_escalations() -> list[Escalation]:
 
         # Check last event time
         events = await trip.events.all().order_by("-created_at").limit(1)
-        if not events:
-            # No events at all — use trip creation time
-            last_activity = trip.created_at
-        else:
-            last_activity = events[0].created_at
+        last_activity = trip.created_at if not events else events[0].created_at
 
-        if last_activity.replace(tzinfo=timezone.utc) < cutoff:
+        if last_activity.replace(tzinfo=UTC) < cutoff:
             esc = await create_escalation(
                 trip_id=trip.id,
                 trigger_reason="timeout",

@@ -11,8 +11,8 @@ Commands:
 from __future__ import annotations
 
 import functools
-from datetime import date, datetime, timedelta
-from typing import Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from datetime import date, datetime
 
 import structlog
 from telegram import Update
@@ -24,7 +24,6 @@ from krankenfahrt.resilience.db_retry import db_retry
 from krankenfahrt.services.billing import (
     ExportFilters,
     export_billing_csv,
-    generate_invoice_for_trips,
 )
 
 logger = structlog.get_logger(__name__)
@@ -83,8 +82,6 @@ def _format_driver(d: Driver) -> str:
     """Format a single driver for display."""
     status = "✅ aktiv" if d.active else "❌ inaktiv"
     p_schein = "✅ P-Schein" if d.p_schein else "⛔ kein P-Schein"
-    vehicle_info = ""
-    # We can't await here — handled in list handlers
     return (
         f"*ID {d.id}* — {d.name}\n"
         f"  📞 {d.phone}  |  {status}  |  {p_schein}\n"
@@ -1348,7 +1345,9 @@ Wenn du nichts extrahieren kannst: {"name": null, "phone": null}"""
 
 async def _handle_conversational_driver_add(update: Update, text: str) -> None:
     """Extract name + phone from natural language, then create driver."""
-    import httpx, json as _json
+    import json as _json
+
+    import httpx
 
     try:
         async with httpx.AsyncClient() as client:
@@ -1450,7 +1449,9 @@ async def handle_natural_message(update: Update, context: ContextTypes.DEFAULT_T
         await cmd_export(update, context)
         return
     elif intent.intent == "escalate":
-        await _handle_escalation_list(update, context)
+        # Uses the /eskalationen handler from chef_bot_escalation
+        from krankenfahrt.bots.chef_bot_escalation import cmd_eskalationen
+        await cmd_eskalationen(update, context)
         return
 
     # Default: conversational response via LLM

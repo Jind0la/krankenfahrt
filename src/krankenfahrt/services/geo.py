@@ -2,7 +2,6 @@
 
 import logging
 import math
-from typing import Optional
 
 import httpx
 
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance between two points in kilometers."""
-    R = 6371.0
+    earth_radius_km = 6371.0
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
     a = (
@@ -25,7 +24,7 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         * math.cos(math.radians(lat2))
         * math.sin(dlon / 2) ** 2
     )
-    return R * 2 * math.asin(math.sqrt(a))
+    return earth_radius_km * 2 * math.asin(math.sqrt(a))
 
 
 def format_eta_minutes(distance_km: float, avg_speed_kmh: float = 30.0) -> int:

@@ -22,6 +22,7 @@ from typing import cast
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
+from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -35,6 +36,7 @@ from tortoise.exceptions import DoesNotExist
 
 from krankenfahrt.config import config
 from krankenfahrt.models.schema import Patient, RecurringTrip, Trip
+from krankenfahrt.services.live_location import LiveLocationTracker
 from krankenfahrt.services.llm import extract_booking_intent
 
 logger = logging.getLogger(__name__)
@@ -734,10 +736,7 @@ async def vorlage_neu_vehicle_type(
     rtime = context.user_data.get("tpl_return_time")
     vt = context.user_data.get("tpl_vehicle_type", "Sitz")
 
-    if isinstance(ptime, dtime):
-        ptime_str = ptime.strftime("%H:%M")
-    else:
-        ptime_str = str(ptime)
+    ptime_str = ptime.strftime("%H:%M") if isinstance(ptime, dtime) else str(ptime)
 
     summary = (
         f"📋 *Neue Vorlage — Bestätigung*\n\n"
@@ -1077,6 +1076,7 @@ async def _try_auto_dispatch(trip, update: Update) -> None:
         # Notify chef about unassigned trip — must use chef bot token
         try:
             import httpx as _httpx
+
             from krankenfahrt.config import config as _cfg
             chef_token = _cfg.CHEF_BOT_TOKEN
             async with _httpx.AsyncClient() as _client:
@@ -1219,7 +1219,6 @@ async def _handle_book_intent(
             logger.warning("Could not parse return time: %s", intent.return_time)
 
     # Build and send confirmation
-    from krankenfahrt.core.notification import Messages
 
     # Format pickup date+time nicely
     days_de = {
@@ -1538,8 +1537,6 @@ def register_handlers(app: Application) -> None:
 # state machine callbacks, driver bot, or dispatch engine). They push status
 # notifications to the patient and manage the live location sharing lifecycle.
 # ═══════════════════════════════════════════════════════════════════════════════
-
-from krankenfahrt.services.live_location import LiveLocationTracker
 
 # Module-level tracker — shared across the patient bot.
 # In production this would be a dependency-injected service, but for MVP

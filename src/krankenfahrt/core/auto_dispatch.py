@@ -12,9 +12,8 @@ freshly-created 'geplant' trips that have no driver yet.
 Dependencies are injected via constructor so tests can swap in mocks/spies.
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Awaitable, Callable, Optional, Protocol
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 import structlog
 
@@ -43,8 +42,8 @@ class AutoDispatchResult:
     """
 
     matched: bool
-    assigned_driver_id: Optional[int] = None
-    escalation_reason: Optional[str] = None
+    assigned_driver_id: int | None = None
+    escalation_reason: str | None = None
 
 
 # ── Notification interface (duck-typed; no ABC so tests can use simple spies) ─
@@ -191,7 +190,7 @@ class AutoDispatchHandler:
 
     async def _notify_driver(self, driver: Driver, trip: Trip) -> None:
         """Send the 'new trip' notification to the assigned driver."""
-        patient = await trip.patient if hasattr(trip, "patient") and callable(getattr(trip, "patient", None)) else trip.patient  # type: ignore[union-attr]
+        patient = await trip.patient if hasattr(trip, "patient") and callable(getattr(trip, "patient", None)) else trip.patient  # type: ignore[union-attr]  # noqa: E501
 
         patient_name = getattr(patient, "name", "Unbekannt")
         pickup_time = Messages.format_time(trip.scheduled_pickup)

@@ -28,7 +28,7 @@ from krankenfahrt.core.dispatch import (  # noqa: E402
     OVERLAP_TOLERANCE_MINUTES,
     Assignment,
     ConstraintKind,
-    ConstraintViolation,
+    ConstraintError,
     DispatchError,
     GreedyDispatchEngine,
     OverlapCheckResult,
@@ -122,11 +122,11 @@ class TestHaversine:
 # 2. CONSTRAINT VIOLATION TESTS
 # ═══════════════════════════════════════════════════════════════════════
 
-class TestConstraintViolation:
-    """ConstraintViolation and DispatchError objects are self-documenting."""
+class TestConstraintError:
+    """ConstraintError and DispatchError objects are self-documenting."""
 
     def test_violation_has_kind_driver_detail(self):
-        v = ConstraintViolation(
+        v = ConstraintError(
             ConstraintKind.NO_P_SCHEIN, driver_id=7, detail="Missing P-Schein"
         )
         assert v.kind == ConstraintKind.NO_P_SCHEIN
@@ -136,8 +136,8 @@ class TestConstraintViolation:
         assert "Driver 7" in str(v)
 
     def test_dispatch_error_aggregates_violations(self):
-        v1 = ConstraintViolation(ConstraintKind.DRIVER_INACTIVE, 1, "Inactive")
-        v2 = ConstraintViolation(ConstraintKind.WRONG_WORK_DAY, 2, "Wrong day")
+        v1 = ConstraintError(ConstraintKind.DRIVER_INACTIVE, 1, "Inactive")
+        v2 = ConstraintError(ConstraintKind.WRONG_WORK_DAY, 2, "Wrong day")
         err = DispatchError(trip_id=42, violations=[v1, v2])
 
         assert err.trip_id == 42
@@ -520,7 +520,7 @@ class TestEngineOverlapDetection:
 # ═══════════════════════════════════════════════════════════════════════
 
 class TestConstraintGates:
-    """Each constraint gate appends a descriptive ConstraintViolation."""
+    """Each constraint gate appends a descriptive ConstraintError."""
 
     @pytest.fixture
     def engine(self):

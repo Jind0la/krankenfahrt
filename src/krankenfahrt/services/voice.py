@@ -1,6 +1,5 @@
 """Voice transcription service using faster-whisper (local CPU)."""
 
-import io
 from pathlib import Path
 
 import structlog
