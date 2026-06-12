@@ -83,7 +83,7 @@ async def test_deadman_switch_not_firing_when_fresh():
         name="Test Deadman",
         description="Test",
         metric_name="test_heartbeat_ts",
-        max_age_seconds=60,
+        max_age_seconds=5,
     )
 
     firing, detail = await rule.evaluate()
@@ -95,15 +95,16 @@ async def test_deadman_switch_not_firing_when_fresh():
 async def test_deadman_switch_fires_when_stale():
     """DeadmanSwitch fires when heartbeat is older than max_age."""
     gauge = _fresh_gauge("test_heartbeat_stale")
-    gauge.set(time.monotonic() - 120)  # 2 minutes ago
+    gauge.set(time.monotonic())
 
     rule = DeadmanSwitch(
         name="Test Deadman",
         description="Test",
         metric_name="test_heartbeat_stale",
-        max_age_seconds=60,
+        max_age_seconds=0.05,  # 50ms — will definitely expire
     )
 
+    await asyncio.sleep(0.1)  # wait past max_age
     firing, detail = await rule.evaluate()
     assert firing
     assert "No heartbeat" in detail
@@ -282,20 +283,21 @@ async def test_threshold_rule_resets():
 async def test_alert_manager_triggers_notifier():
     """AlertManager fires notifier when a rule transitions to firing."""
     gauge = _fresh_gauge("test_am_gauge")
-    gauge.set(time.monotonic() - 120)  # stale heartbeat
+    gauge.set(time.monotonic())
 
     rule = DeadmanSwitch(
         name="AM Deadman",
         description="Test deadman",
         metric_name="test_am_gauge",
-        max_age_seconds=60,
+        max_age_seconds=0.05,
         severity=Severity.CRITICAL,
-        cooldown_seconds=1.0,  # short cooldown for test
+        cooldown_seconds=1.0,
     )
 
     spy = _SpyNotifier()
     manager = AlertManager(rules=[rule], notifier=spy, eval_interval=999)
 
+    await asyncio.sleep(0.1)  # let heartbeat go stale
     await manager.evaluate_now()
 
     assert len(spy.calls) >= 1, f"Expected at least 1 notification, got {spy.calls}"
@@ -308,13 +310,13 @@ async def test_alert_manager_triggers_notifier():
 async def test_alert_manager_sends_recovery():
     """AlertManager sends recovery notification when alert resolves."""
     gauge = _fresh_gauge("test_am_recovery")
-    gauge.set(time.monotonic() - 120)  # stale
+    gauge.set(time.monotonic())
 
     rule = DeadmanSwitch(
         name="AM Recovery",
         description="Test recovery",
         metric_name="test_am_recovery",
-        max_age_seconds=60,
+        max_age_seconds=0.05,
         severity=Severity.CRITICAL,
         cooldown_seconds=1.0,
     )
@@ -322,7 +324,8 @@ async def test_alert_manager_sends_recovery():
     spy = _SpyNotifier()
     manager = AlertManager(rules=[rule], notifier=spy, eval_interval=999)
 
-    # First eval — should fire
+    # First eval — let heartbeat go stale, then fire
+    await asyncio.sleep(0.1)
     await manager.evaluate_now()
     assert len(spy.calls) >= 1
     assert any("RESOLVED" not in msg for _, msg in spy.calls), (
@@ -349,13 +352,13 @@ async def test_alert_manager_sends_recovery():
 async def test_cooldown_prevents_repeat_notifications():
     """AlertManager respects cooldown — no repeat notifications within cooldown window."""
     gauge = _fresh_gauge("test_am_cooldown")
-    gauge.set(time.monotonic() - 120)
+    gauge.set(time.monotonic())
 
     rule = DeadmanSwitch(
         name="AM Cooldown",
         description="Test cooldown",
         metric_name="test_am_cooldown",
-        max_age_seconds=60,
+        max_age_seconds=0.05,
         severity=Severity.WARNING,
         cooldown_seconds=10.0,  # 10s cooldown
     )
@@ -363,7 +366,8 @@ async def test_cooldown_prevents_repeat_notifications():
     spy = _SpyNotifier()
     manager = AlertManager(rules=[rule], notifier=spy, eval_interval=999)
 
-    # First eval — fires + notifies
+    # First eval — let heartbeat go stale, fires + notifies
+    await asyncio.sleep(0.1)
     await manager.evaluate_now()
     first_call_count = len(spy.calls)
     assert first_call_count >= 1
@@ -380,18 +384,19 @@ async def test_cooldown_prevents_repeat_notifications():
 async def test_active_alerts_property():
     """AlertManager.active_alerts reflects currently firing rules."""
     gauge = _fresh_gauge("test_active_alerts")
-    gauge.set(time.monotonic() - 120)
+    gauge.set(time.monotonic())
 
     rule = DeadmanSwitch(
         name="Active Test",
         description="Test",
         metric_name="test_active_alerts",
-        max_age_seconds=60,
+        max_age_seconds=0.05,
     )
 
     spy = _SpyNotifier()
     manager = AlertManager(rules=[rule], notifier=spy)
 
+    await asyncio.sleep(0.1)  # let heartbeat go stale
     await manager.evaluate_now()
 
     active = manager.active_alerts
